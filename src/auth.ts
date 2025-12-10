@@ -22,6 +22,12 @@ const TokenSchema = z.object({
   scope: z.string(),
 });
 
+const AppAccessTokenSchema = z.object({
+  access_token: z.string(),
+  token_type: z.string(),
+  expires_in: z.number(),
+});
+
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
 
@@ -30,6 +36,14 @@ export class KickOAuth {
     private readonly clientSecret: string,
     private readonly redirectUri: string
   ) {}
+
+  private request(endpoint: string, body: Record<string, string>) {
+    return fetch(`${this.baseUrl}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body),
+    });
+  }
 
   getAuthorizationUrl(scopes: Scope[]) {
     const state = randomBytes(16).toString("hex");
@@ -56,17 +70,13 @@ export class KickOAuth {
   }
 
   async exchangeCodeForToken(code: string, codeVerifier: string) {
-    const res = await fetch(`${this.baseUrl}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        redirect_uri: this.redirectUri,
-        grant_type: "authorization_code",
-        code_verifier: codeVerifier,
-      }),
+    const res = await this.request("/token", {
+      code,
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      redirect_uri: this.redirectUri,
+      grant_type: "authorization_code",
+      code_verifier: codeVerifier,
     });
 
     if (!res.ok) {
@@ -84,6 +94,30 @@ export class KickOAuth {
       ...token,
       expiresAt: new Date(Date.now() + expires_in * 1000),
       scopes: scope.split(" ") as Scope[],
+    });
+  }
+
+  async getAppAccessToken() {
+    const res = await this.request("/token", {
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      grant_type: "client_credentials",
+    });
+
+    if (!res.ok) {
+      throw new Error("An error occured while getting app access token");
+    }
+
+    const data = await res.json();
+    const parsed = AppAccessTokenSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new Error("Unexpected response shape");
+    }
+
+    const { expires_in, ...token } = parsed.data;
+    return camelcaseKeys({
+      ...token,
+      expiresAt: new Date(Date.now() + expires_in * 1000),
     });
   }
 }
