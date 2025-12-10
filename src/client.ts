@@ -1,23 +1,28 @@
 import type { KickOAuth, Scope } from "./auth.js";
+import { CategoriesAPI } from "./modules/categories.js";
 
 interface ClientOptionsBase {
   accessToken: string;
 }
 
-interface AppClientOptions extends ClientOptionsBase {
+export interface AppClientOptions extends ClientOptionsBase {
   tokenType: "app";
 }
 
-interface UserClientOptions extends ClientOptionsBase {
+export interface UserClientOptions extends ClientOptionsBase {
   tokenType: "user";
   scopes: Scope[];
   refreshToken?: string | undefined;
 }
 
 export class Kicklient {
+  readonly categories;
+
   private constructor(
     private readonly options: AppClientOptions | UserClientOptions
-  ) {}
+  ) {
+    this.categories = new CategoriesAPI(options);
+  }
 
   static async create(
     auth: KickOAuth,
