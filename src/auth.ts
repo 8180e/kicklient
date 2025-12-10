@@ -1,6 +1,7 @@
-import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
+import type { ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
+import { createResponseSchema, formatData } from "./utils.js";
 
 export type Scope =
   | "user:read"
@@ -28,8 +29,8 @@ const AppAccessTokenSchema = z.object({
   expires_in: z.number(),
 });
 
-const TokenIntrospectionSchema = z.object({
-  data: z.union([
+const TokenIntrospectionSchema = createResponseSchema(
+  z.union([
     z.object({ active: z.literal(false) }),
     z.intersection(
       z.object({
@@ -42,24 +43,8 @@ const TokenIntrospectionSchema = z.object({
         z.object({ token_type: z.literal("user"), scope: z.string() }),
       ])
     ),
-  ]),
-});
-
-function formatData<T extends ObjectLike | readonly ObjectLike[]>(
-  Schema: z.ZodType<T>,
-  data: unknown
-) {
-  const parsed = Schema.safeParse(data);
-  if (!parsed.success) {
-    throw new Error(
-      "Unexpected response shape: " +
-        parsed.error +
-        "\nReceived: " +
-        JSON.stringify(data, undefined, 2)
-    );
-  }
-  return camelcaseKeys(parsed.data, { deep: true });
-}
+  ])
+);
 
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
