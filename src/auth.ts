@@ -2,7 +2,7 @@ import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
 
-type Scope =
+export type Scope =
   | "user:read"
   | "channel:read"
   | "channel:write"
