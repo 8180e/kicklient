@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "crypto";
+import z from "zod";
 
 type Scope =
   | "user:read"
@@ -11,6 +12,14 @@ type Scope =
   | "moderation:chat_message:manage"
   | "kicks:read"
   | (string & {});
+
+const TokenSchema = z.object({
+  access_token: z.string(),
+  token_type: z.string(),
+  refresh_token: z.string(),
+  expires_in: z.number(),
+  scope: z.string(),
+});
 
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
@@ -59,6 +68,16 @@ export class KickOAuth {
       }),
     });
 
-    return res.json();
+    if (!res.ok) {
+      throw new Error("An error occured while exchanging tokens");
+    }
+
+    const tokens = await res.json();
+    const parsed = TokenSchema.safeParse(tokens);
+    if (!parsed.success) {
+      throw new Error("Unexpected response shape");
+    }
+
+    return parsed.data;
   }
 }
