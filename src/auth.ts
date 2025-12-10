@@ -130,4 +130,15 @@ export class KickOAuth {
       scopes: scope.split(" ") as Scope[],
     };
   }
+
+  async revokeToken(
+    token: string,
+    tokenHintType?: "access_token" | "refresh_token"
+  ) {
+    const requestBody: Record<string, string> = { token };
+    if (tokenHintType) {
+      requestBody.token_hint_type = tokenHintType;
+    }
+    await this.request("/revoke", requestBody);
+  }
 }
