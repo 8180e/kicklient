@@ -1,4 +1,4 @@
-import camelcaseKeys from "camelcase-keys";
+import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
 
@@ -27,6 +27,17 @@ const AppAccessTokenSchema = z.object({
   token_type: z.string(),
   expires_in: z.number(),
 });
+
+function formatResponseData<T extends ObjectLike | readonly ObjectLike[]>(
+  data: unknown,
+  ResponseSchema: z.ZodType<T>
+) {
+  const parsed = ResponseSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error("Unexpected response shape");
+  }
+  return camelcaseKeys(parsed.data, { deep: true });
+}
 
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
@@ -83,18 +94,15 @@ export class KickOAuth {
       throw new Error("An error occured while exchanging tokens");
     }
 
-    const data = await res.json();
-    const parsed = TokenSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new Error("Unexpected response shape");
-    }
-
-    const { expires_in, scope, ...token } = parsed.data;
-    return camelcaseKeys({
+    const { expiresIn, scope, ...token } = formatResponseData(
+      await res.json(),
+      TokenSchema
+    );
+    return {
       ...token,
-      expiresAt: new Date(Date.now() + expires_in * 1000),
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
       scopes: scope.split(" ") as Scope[],
-    });
+    };
   }
 
   async getAppAccessToken() {
@@ -108,16 +116,10 @@ export class KickOAuth {
       throw new Error("An error occured while getting app access token");
     }
 
-    const data = await res.json();
-    const parsed = AppAccessTokenSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new Error("Unexpected response shape");
-    }
-
-    const { expires_in, ...token } = parsed.data;
-    return camelcaseKeys({
-      ...token,
-      expiresAt: new Date(Date.now() + expires_in * 1000),
-    });
+    const { expiresIn, ...token } = formatResponseData(
+      await res.json(),
+      AppAccessTokenSchema
+    );
+    return { ...token, expiresAt: new Date(Date.now() + expiresIn * 1000) };
   }
 }
