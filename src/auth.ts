@@ -13,6 +13,8 @@ type Scope =
   | (string & {});
 
 export class KickOAuth {
+  private readonly baseUrl = "https://id.kick.com/oauth";
+
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
@@ -37,9 +39,26 @@ export class KickOAuth {
     }
     params.append("redirect_uri", this.redirectUri);
     return {
-      url: `https://id.kick.com/oauth/authorize?${params}`,
+      url: `${this.baseUrl}/authorize?${params}`,
       state,
       codeVerifier,
     };
+  }
+
+  async exchangeCodeForToken(code: string, codeVerifier: string) {
+    const res = await fetch(`${this.baseUrl}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        redirect_uri: this.redirectUri,
+        grant_type: "authorization_code",
+        code_verifier: codeVerifier,
+      }),
+    });
+
+    return res.json();
   }
 }
