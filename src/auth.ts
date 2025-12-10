@@ -28,6 +28,39 @@ const AppAccessTokenSchema = z.object({
   expires_in: z.number(),
 });
 
+const TokenIntrospectionSchema = z.object({
+  data: z.union([
+    z.object({ active: z.literal(false) }),
+    z.intersection(
+      z.object({
+        active: z.literal(true),
+        client_id: z.string(),
+        exp: z.number(),
+      }),
+      z.union([
+        z.object({ token_type: z.literal("app") }),
+        z.object({ token_type: z.literal("user"), scope: z.string() }),
+      ])
+    ),
+  ]),
+});
+
+function formatData<T extends ObjectLike | readonly ObjectLike[]>(
+  Schema: z.ZodType<T>,
+  data: unknown
+) {
+  const parsed = Schema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(
+      "Unexpected response shape: " +
+        parsed.error +
+        "\nReceived: " +
+        JSON.stringify(data, undefined, 2)
+    );
+  }
+  return camelcaseKeys(parsed.data, { deep: true });
+}
+
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
 
@@ -60,11 +93,7 @@ export class KickOAuth {
       throw new Error(errorMessage);
     }
 
-    const parsed = ResponseSchema.safeParse(await res.json());
-    if (!parsed.success) {
-      throw new Error("Unexpected response shape");
-    }
-    return camelcaseKeys(parsed.data, { deep: true });
+    return formatData(ResponseSchema, await res.json());
   }
 
   getAuthorizationUrl(scopes: Scope[]) {
@@ -140,5 +169,34 @@ export class KickOAuth {
       requestBody.token_hint_type = tokenHintType;
     }
     await this.request("/revoke", requestBody);
+  }
+
+  async introspectToken(token: string) {
+    const res = await fetch("https://api.kick.com/public/v1/token/introspect", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.status === 401) {
+      return { active: false as const };
+    }
+
+    if (!res.ok) {
+      throw new Error("An error occured while introspecting token");
+    }
+
+    const { data } = formatData(TokenIntrospectionSchema, await res.json());
+    if (!data.active) {
+      return data;
+    }
+
+    const { exp, ...tokenData } = data;
+    const tokenWithDate = { ...tokenData, expiresAt: new Date(exp * 1000) };
+    if (tokenWithDate.tokenType === "app") {
+      return tokenWithDate;
+    }
+
+    const { scope, ...userTokenData } = tokenWithDate;
+    return { ...userTokenData, scopes: scope.split(" ") as Scope[] };
   }
 }
