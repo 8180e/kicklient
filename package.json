@@ -22,6 +22,7 @@
     "typescript-eslint": "^8.49.0"
   },
   "dependencies": {
+    "camelcase-keys": "^10.0.1",
     "zod": "^4.1.13"
   }
 }

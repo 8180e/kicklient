@@ -1,3 +1,4 @@
+import camelcaseKeys from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
 
@@ -72,12 +73,17 @@ export class KickOAuth {
       throw new Error("An error occured while exchanging tokens");
     }
 
-    const tokens = await res.json();
-    const parsed = TokenSchema.safeParse(tokens);
+    const data = await res.json();
+    const parsed = TokenSchema.safeParse(data);
     if (!parsed.success) {
       throw new Error("Unexpected response shape");
     }
 
-    return parsed.data;
+    const { expires_in, scope, ...token } = parsed.data;
+    return camelcaseKeys({
+      ...token,
+      expiresAt: new Date(Date.now() + expires_in * 1000),
+      scopes: scope.split(" ") as Scope[],
+    });
   }
 }
