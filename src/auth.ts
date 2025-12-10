@@ -14,7 +14,7 @@ type Scope =
   | "kicks:read"
   | (string & {});
 
-const TokenSchema = z.object({
+const UserTokenSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
   refresh_token: z.string(),
@@ -50,7 +50,11 @@ export class KickOAuth {
     errorMessage: string,
     ResponseSchema: z.ZodType<T>
   ) {
-    const res = await this.request("/token", body);
+    const res = await this.request("/token", {
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      ...body,
+    });
 
     if (!res.ok) {
       throw new Error(errorMessage);
@@ -91,14 +95,12 @@ export class KickOAuth {
     const { expiresIn, scope, ...token } = await this.getTokenData(
       {
         code,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
         redirect_uri: this.redirectUri,
         grant_type: "authorization_code",
         code_verifier: codeVerifier,
       },
       "An error occured while exchanging tokens",
-      TokenSchema
+      UserTokenSchema
     );
     return {
       ...token,
@@ -109,16 +111,23 @@ export class KickOAuth {
 
   async getAppAccessToken() {
     const { expiresIn, ...token } = await this.getTokenData(
-      {
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        grant_type: "client_credentials",
-      },
+      { grant_type: "client_credentials" },
       "An error occured while getting app access token",
       AppAccessTokenSchema
     );
     return { ...token, expiresAt: new Date(Date.now() + expiresIn * 1000) };
   }
 
-  async refreshToken() {}
+  async refreshToken(refreshToken: string) {
+    const { expiresIn, scope, ...token } = await this.getTokenData(
+      { refresh_token: refreshToken, grant_type: "refresh_token" },
+      "An error occured while refreshing tokens",
+      UserTokenSchema
+    );
+    return {
+      ...token,
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
+      scopes: scope.split(" ") as Scope[],
+    };
+  }
 }
