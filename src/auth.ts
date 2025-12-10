@@ -28,17 +28,6 @@ const AppAccessTokenSchema = z.object({
   expires_in: z.number(),
 });
 
-function formatResponseData<T extends ObjectLike | readonly ObjectLike[]>(
-  data: unknown,
-  ResponseSchema: z.ZodType<T>
-) {
-  const parsed = ResponseSchema.safeParse(data);
-  if (!parsed.success) {
-    throw new Error("Unexpected response shape");
-  }
-  return camelcaseKeys(parsed.data, { deep: true });
-}
-
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";
 
@@ -54,6 +43,24 @@ export class KickOAuth {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(body),
     });
+  }
+
+  private async getTokenData<T extends ObjectLike | readonly ObjectLike[]>(
+    body: Record<string, string>,
+    errorMessage: string,
+    ResponseSchema: z.ZodType<T>
+  ) {
+    const res = await this.request("/token", body);
+
+    if (!res.ok) {
+      throw new Error(errorMessage);
+    }
+
+    const parsed = ResponseSchema.safeParse(await res.json());
+    if (!parsed.success) {
+      throw new Error("Unexpected response shape");
+    }
+    return camelcaseKeys(parsed.data, { deep: true });
   }
 
   getAuthorizationUrl(scopes: Scope[]) {
@@ -81,21 +88,16 @@ export class KickOAuth {
   }
 
   async exchangeCodeForToken(code: string, codeVerifier: string) {
-    const res = await this.request("/token", {
-      code,
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
-      redirect_uri: this.redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: codeVerifier,
-    });
-
-    if (!res.ok) {
-      throw new Error("An error occured while exchanging tokens");
-    }
-
-    const { expiresIn, scope, ...token } = formatResponseData(
-      await res.json(),
+    const { expiresIn, scope, ...token } = await this.getTokenData(
+      {
+        code,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        redirect_uri: this.redirectUri,
+        grant_type: "authorization_code",
+        code_verifier: codeVerifier,
+      },
+      "An error occured while exchanging tokens",
       TokenSchema
     );
     return {
@@ -106,20 +108,17 @@ export class KickOAuth {
   }
 
   async getAppAccessToken() {
-    const res = await this.request("/token", {
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
-      grant_type: "client_credentials",
-    });
-
-    if (!res.ok) {
-      throw new Error("An error occured while getting app access token");
-    }
-
-    const { expiresIn, ...token } = formatResponseData(
-      await res.json(),
+    const { expiresIn, ...token } = await this.getTokenData(
+      {
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        grant_type: "client_credentials",
+      },
+      "An error occured while getting app access token",
       AppAccessTokenSchema
     );
     return { ...token, expiresAt: new Date(Date.now() + expiresIn * 1000) };
   }
+
+  async refreshToken() {}
 }
