@@ -1,4 +1,5 @@
 import type { KickOAuth, Scope } from "./auth.js";
+import { KickAPIError } from "./errors.js";
 import { CategoriesAPI } from "./modules/categories.js";
 
 interface ClientOptionsBase {
@@ -32,7 +33,9 @@ export class Kicklient {
     const tokenInfo = await auth.introspectToken(accessToken);
     if (!tokenInfo.active) {
       if (!refreshToken) {
-        throw new Error("Access token is expired or invalid");
+        throw new KickAPIError({
+          message: "Access token is expired or invalid",
+        });
       }
       const tokens = await auth.refreshToken(refreshToken);
       return new Kicklient({ ...tokens, tokenType: "user" });
