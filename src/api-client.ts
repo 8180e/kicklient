@@ -28,7 +28,7 @@ export abstract class KickAPIClient {
     body?: unknown,
     retry = false
   ): Promise<unknown> {
-    const res = await fetch(`${this.baseUrl}/${endpoint}`, {
+    const res = await fetch(`${this.baseUrl}${endpoint}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.options.accessToken}`,
@@ -40,6 +40,7 @@ export abstract class KickAPIClient {
     });
 
     const data = await res.json();
+    const errorOptions = { details: { data, endpoint } };
 
     if (res.status === 401 && !retry) {
       if (this.options.tokenType === "app") {
@@ -48,7 +49,7 @@ export abstract class KickAPIClient {
         ).accessToken;
       } else {
         if (!this.options.refreshToken) {
-          throw new KickUnauthorizedError({ details: data });
+          throw new KickUnauthorizedError(errorOptions);
         }
         const { scopes, accessToken, refreshToken } =
           await this.auth.refreshToken(this.options.refreshToken);
@@ -61,20 +62,19 @@ export abstract class KickAPIClient {
     }
 
     if (!res.ok) {
-      const options = { details: data };
       switch (res.status) {
         case 400:
-          throw new KickBadRequestError(options);
+          throw new KickBadRequestError(errorOptions);
         case 401:
-          throw new KickUnauthorizedError(options);
+          throw new KickUnauthorizedError(errorOptions);
         case 403:
-          throw new KickForbiddenError(options);
+          throw new KickForbiddenError(errorOptions);
         case 404:
-          throw new KickNotFoundError(options);
+          throw new KickNotFoundError(errorOptions);
         case 429:
-          throw new KickTooManyRequestsError(options);
+          throw new KickTooManyRequestsError(errorOptions);
         case 500:
-          throw new KickInternalServerError(options);
+          throw new KickInternalServerError(errorOptions);
         default:
           throw new KickAPIError({
             message: "An unexpected API error occured",
