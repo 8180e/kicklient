@@ -1,16 +1,15 @@
 import type { ObjectLike } from "camelcase-keys";
 import camelcaseKeys from "camelcase-keys";
 import z from "zod";
+import { KickAPIError } from "./errors.js";
 
 export function parseSchema<T>(Schema: z.ZodType<T>, data: unknown) {
   const parsed = Schema.safeParse(data);
   if (!parsed.success) {
-    throw new Error(
-      "Unexpected response shape: " +
-        parsed.error +
-        "\nReceived: " +
-        JSON.stringify(data, undefined, 2)
-    );
+    throw new KickAPIError({
+      message: "Unexpected response shape",
+      details: { error: parsed.error.issues, received: data },
+    });
   }
   return parsed.data;
 }
