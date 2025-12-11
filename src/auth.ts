@@ -1,7 +1,7 @@
 import type { ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
-import { createResponseSchema, formatData } from "./utils.js";
+import { formatData } from "./utils.js";
 import { KickAPIError } from "./errors.js";
 
 export type Scope =
@@ -30,8 +30,8 @@ const AppAccessTokenSchema = z.object({
   expires_in: z.number(),
 });
 
-const TokenIntrospectionSchema = createResponseSchema(
-  z.union([
+const TokenIntrospectionSchema = z.object({
+  data: z.union([
     z.object({ active: z.literal(false) }),
     z.intersection(
       z.object({
@@ -44,8 +44,8 @@ const TokenIntrospectionSchema = createResponseSchema(
         z.object({ token_type: z.literal("user"), scope: z.string() }),
       ])
     ),
-  ])
-);
+  ]),
+});
 
 export class KickOAuth {
   private readonly baseUrl = "https://id.kick.com/oauth";

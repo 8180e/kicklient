@@ -20,7 +20,3 @@ export function formatData<T extends ObjectLike | readonly ObjectLike[]>(
 ) {
   return camelcaseKeys(parseSchema(Schema, data), { deep: true });
 }
-
-export function createResponseSchema<T>(data: z.ZodType<T>) {
-  return z.object({ data });
-}
