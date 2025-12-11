@@ -2,6 +2,7 @@ import type { ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
 import { createResponseSchema, formatData } from "./utils.js";
+import { KickAPIError } from "./errors.js";
 
 export type Scope =
   | "user:read"
@@ -75,7 +76,7 @@ export class KickOAuth {
     });
 
     if (!res.ok) {
-      throw new Error(errorMessage);
+      throw new KickAPIError({ message: errorMessage });
     }
 
     return formatData(ResponseSchema, await res.json());
@@ -167,7 +168,10 @@ export class KickOAuth {
     }
 
     if (!res.ok) {
-      throw new Error("An error occured while introspecting token");
+      throw new KickAPIError({
+        message: "An error occured while introspecting token",
+        details: await res.json(),
+      });
     }
 
     const { data } = formatData(TokenIntrospectionSchema, await res.json());
