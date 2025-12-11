@@ -1,6 +1,15 @@
 import z from "zod";
 import type { AppClientOptions, UserClientOptions } from "./client.js";
 import { formatData } from "./utils.js";
+import {
+  KickAPIError,
+  KickBadRequestError,
+  KickForbiddenError,
+  KickInternalServerError,
+  KickNotFoundError,
+  KickTooManyRequestsError,
+  KickUnauthorizedError,
+} from "./errors.js";
 
 const ResponseSchema = z.object({ data: z.unknown() });
 
@@ -24,7 +33,33 @@ export abstract class KickAPIClient {
       },
       body: JSON.stringify(body),
     });
-    return formatData(ResponseSchema, await res.json());
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const options = { details: data };
+      switch (res.status) {
+        case 400:
+          throw new KickBadRequestError(options);
+        case 401:
+          throw new KickUnauthorizedError(options);
+        case 403:
+          throw new KickForbiddenError(options);
+        case 404:
+          throw new KickNotFoundError(options);
+        case 429:
+          throw new KickTooManyRequestsError(options);
+        case 500:
+          throw new KickInternalServerError(options);
+        default:
+          throw new KickAPIError({
+            message: "An unexpected API error occured",
+            details: { status: res.status, data },
+          });
+      }
+    }
+
+    return formatData(ResponseSchema, data);
   }
 
   protected get(endpoint: string) {
