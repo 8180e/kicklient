@@ -20,9 +20,10 @@ export class Kicklient {
   readonly categories;
 
   private constructor(
-    private readonly options: AppClientOptions | UserClientOptions
+    auth: KickOAuth,
+    options: AppClientOptions | UserClientOptions
   ) {
-    this.categories = new CategoriesAPI(options);
+    this.categories = new CategoriesAPI(auth, options);
   }
 
   static async create(
@@ -38,14 +39,14 @@ export class Kicklient {
         });
       }
       const tokens = await auth.refreshToken(refreshToken);
-      return new Kicklient({ ...tokens, tokenType: "user" });
+      return new Kicklient(auth, { ...tokens, tokenType: "user" });
     }
 
     if (tokenInfo.tokenType === "app") {
-      return new Kicklient({ accessToken, tokenType: "app" });
+      return new Kicklient(auth, { accessToken, tokenType: "app" });
     }
 
-    return new Kicklient({
+    return new Kicklient(auth, {
       accessToken,
       refreshToken,
       scopes: tokenInfo.scopes,
