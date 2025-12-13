@@ -8,6 +8,8 @@ export type Scope =
   | "user:read"
   | "channel:read"
   | "channel:write"
+  | "channel:rewards:read"
+  | "channel:rewards:write"
   | "chat:write"
   | "streamkey:read"
   | "events:subscribe"
