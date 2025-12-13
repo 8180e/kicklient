@@ -40,4 +40,19 @@ export class ChannelsAPI extends KickAPIClient {
     }
     return channel;
   }
+
+  getChannelsByBroadcasterId(...ids: number[]) {
+    if (ids.length > 50) {
+      throw new KickAPIError({
+        message: "Can not provide more than 50 user IDs",
+      });
+    }
+    const params = new URLSearchParams();
+    for (const id of ids) {
+      params.append("broadcaster_user_id", id.toString());
+    }
+    return this.get(`/channels?${params}`, ChannelsSchema, false, [
+      "channel:read",
+    ]);
+  }
 }
