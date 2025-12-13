@@ -1,6 +1,6 @@
 import z from "zod";
 import type { AppClientOptions, UserClientOptions } from "./client.js";
-import { formatData } from "./utils.js";
+import { formatData, parseSchema } from "./utils.js";
 import {
   KickAPIError,
   KickBadRequestError,
@@ -18,6 +18,7 @@ interface RequestOptions {
   body?: unknown;
   requiredScopes?: Scope[] | undefined;
   requireUserToken?: boolean | undefined;
+  RequestSchema?: z.ZodType | undefined;
 }
 
 async function getResponseData<T>(res: Response, ResponseSchema: z.ZodType<T>) {
@@ -43,6 +44,7 @@ export abstract class KickAPIClient {
       body,
       requiredScopes,
       requireUserToken,
+      RequestSchema,
     }: RequestOptions = {},
     retry = false
   ): Promise<Response> {
@@ -64,6 +66,10 @@ export abstract class KickAPIClient {
       });
     }
 
+    const reqBody = RequestSchema
+      ? parseSchema(RequestSchema, body, "Request body is invalid")
+      : body;
+
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
       headers: {
@@ -72,7 +78,7 @@ export abstract class KickAPIClient {
           ? {}
           : { "Content-Type": "application/json" }),
       },
-      body: JSON.stringify(body && decamelizeKeys(body)),
+      body: JSON.stringify(reqBody && decamelizeKeys(reqBody)),
     });
 
     if (!res.ok) {
@@ -100,7 +106,7 @@ export abstract class KickAPIClient {
             }
             return this.request(
               endpoint,
-              { method, body, requiredScopes, requireUserToken },
+              { method, body, requiredScopes, requireUserToken, RequestSchema },
               true
             );
           }
@@ -139,6 +145,7 @@ export abstract class KickAPIClient {
   protected post(
     endpoint: string,
     body: unknown,
+    RequestSchema: z.ZodType,
     requireUserToken?: boolean,
     requiredScopes?: Scope[]
   ) {
@@ -147,18 +154,26 @@ export abstract class KickAPIClient {
       body,
       requireUserToken,
       requiredScopes,
+      RequestSchema,
     });
   }
 
   protected async postWithResponseData<T>(
     endpoint: string,
     body: unknown,
+    RequestSchema: z.ZodType,
     ResponseSchema: z.ZodType<T>,
     requireUserToken?: boolean,
     requiredScopes?: Scope[]
   ) {
     return getResponseData(
-      await this.post(endpoint, body, requireUserToken, requiredScopes),
+      await this.post(
+        endpoint,
+        body,
+        RequestSchema,
+        requireUserToken,
+        requiredScopes
+      ),
       ResponseSchema
     );
   }
@@ -166,6 +181,7 @@ export abstract class KickAPIClient {
   protected patch(
     endpoint: string,
     body: unknown,
+    RequestSchema: z.ZodType,
     requireUserToken?: boolean,
     requiredScopes?: Scope[]
   ) {
@@ -174,18 +190,26 @@ export abstract class KickAPIClient {
       body,
       requireUserToken,
       requiredScopes,
+      RequestSchema,
     });
   }
 
   protected async patchWithResponseData<T>(
     endpoint: string,
     body: unknown,
+    RequestSchema: z.ZodType,
     ResponseSchema: z.ZodType<T>,
     requireUserToken?: boolean,
     requiredScopes?: Scope[]
   ) {
     return getResponseData(
-      await this.patch(endpoint, body, requireUserToken, requiredScopes),
+      await this.patch(
+        endpoint,
+        body,
+        RequestSchema,
+        requireUserToken,
+        requiredScopes
+      ),
       ResponseSchema
     );
   }
