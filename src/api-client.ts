@@ -11,24 +11,15 @@ import {
   KickUnauthorizedError,
 } from "./errors.js";
 import type { KickOAuth } from "./auth.js";
-import type { CamelCaseKeys, ObjectLike } from "camelcase-keys";
 
-type RequestReturn<T> = T extends readonly any[] | ObjectLike // eslint-disable-line @typescript-eslint/no-explicit-any
-  ? CamelCaseKeys<
-      T,
-      true,
-      false,
-      false,
-      readonly never[],
-      readonly never[],
-      "data"
-    >
-  : T;
+async function getResponseData<T>(res: Response, ResponseSchema: z.ZodType<T>) {
+  if (res.status === 204) {
+    throw new KickAPIError({
+      message: "Response body does not include content",
+    });
+  }
 
-interface RequestOptions<T> {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
-  body?: unknown;
-  ResponseSchema?: z.ZodType<T> | undefined;
+  return formatData(z.object({ data: ResponseSchema }), await res.json()).data;
 }
 
 export abstract class KickAPIClient {
@@ -37,25 +28,12 @@ export abstract class KickAPIClient {
     private readonly options: AppClientOptions | UserClientOptions
   ) {}
 
-  private async request<T>(
-    endpoint: string,
-    options: Omit<RequestOptions<T>, "ResponseSchema"> & {
-      ResponseSchema: z.ZodType<T>;
-    },
-    retry?: boolean
-  ): Promise<RequestReturn<T>>;
-
   private async request(
     endpoint: string,
-    options?: Omit<RequestOptions<unknown>, "ResponseSchema">,
-    retry?: boolean
-  ): Promise<void>;
-
-  private async request<T>(
-    endpoint: string,
-    { method = "GET", body, ResponseSchema }: RequestOptions<T> = {},
+    method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
+    body?: unknown,
     retry = false
-  ): Promise<RequestReturn<T> | void> {
+  ): Promise<Response> {
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
       headers: {
@@ -90,11 +68,7 @@ export abstract class KickAPIClient {
               this.options.accessToken = accessToken;
               this.options.refreshToken = refreshToken;
             }
-            return this.request(
-              endpoint,
-              { method, body, ResponseSchema: ResponseSchema! },
-              true
-            );
+            return this.request(endpoint, method, body, true);
           }
           throw new KickUnauthorizedError(errorOptions);
         case 403:
@@ -113,60 +87,38 @@ export abstract class KickAPIClient {
       }
     }
 
-    if (ResponseSchema) {
-      if (res.status === 204) {
-        throw new KickAPIError({
-          message: "Response body does not include content",
-        });
-      }
-
-      const json = await res.json();
-      return formatData(z.object({ data: ResponseSchema }), json)
-        .data as RequestReturn<T>;
-    }
+    return res;
   }
 
   protected async get<T>(endpoint: string, ResponseSchema: z.ZodType<T>) {
-    return this.request(endpoint, { ResponseSchema });
+    return getResponseData(await this.request(endpoint), ResponseSchema);
   }
 
-  protected async post<T>(
+  protected post(endpoint: string, body: unknown) {
+    return this.request(endpoint, "POST", body);
+  }
+
+  protected async postWithResponseData<T>(
     endpoint: string,
     body: unknown,
     ResponseSchema: z.ZodType<T>
-  ): Promise<RequestReturn<T>>;
-
-  protected async post(endpoint: string, body: unknown): Promise<void>;
-
-  protected async post<T>(
-    endpoint: string,
-    body: unknown,
-    ResponseSchema?: z.ZodType<T>
   ) {
-    return ResponseSchema
-      ? this.request(endpoint, { method: "POST", body, ResponseSchema })
-      : this.request(endpoint, { method: "POST", body });
+    return getResponseData(await this.post(endpoint, body), ResponseSchema);
   }
 
-  protected async patch<T>(
+  protected patch(endpoint: string, body: unknown) {
+    return this.request(endpoint, "PATCH", body);
+  }
+
+  protected async patchWithResponseData<T>(
     endpoint: string,
     body: unknown,
     ResponseSchema: z.ZodType<T>
-  ): Promise<RequestReturn<T>>;
-
-  protected async patch(endpoint: string, body: unknown): Promise<void>;
-
-  protected patch<T>(
-    endpoint: string,
-    body: unknown,
-    ResponseSchema?: z.ZodType<T>
   ) {
-    return ResponseSchema
-      ? this.request(endpoint, { method: "PATCH", body, ResponseSchema })
-      : this.request(endpoint, { method: "PATCH", body });
+    return getResponseData(await this.patch(endpoint, body), ResponseSchema);
   }
 
-  protected delete(endpoint: string) {
-    return this.request(endpoint, { method: "DELETE" });
+  protected async delete(endpoint: string) {
+    await this.request(endpoint, "DELETE");
   }
 }
