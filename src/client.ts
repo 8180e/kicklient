@@ -1,6 +1,7 @@
 import type { KickOAuth, Scope } from "./auth.js";
 import { KickAPIError } from "./errors.js";
 import { CategoriesAPI } from "./modules/categories.js";
+import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
 import { ChannelsAPI } from "./modules/channels.js";
 import { UsersAPI } from "./modules/users.js";
 
@@ -22,6 +23,7 @@ export class Kicklient {
   readonly categories;
   readonly users;
   readonly channels;
+  readonly channelRewards;
 
   private constructor(
     auth: KickOAuth,
@@ -30,6 +32,7 @@ export class Kicklient {
     this.categories = new CategoriesAPI(auth, options);
     this.users = new UsersAPI(auth, options);
     this.channels = new ChannelsAPI(auth, options);
+    this.channelRewards = new ChannelRewardsAPI(auth, options);
   }
 
   static async create(
