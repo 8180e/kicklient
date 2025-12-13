@@ -47,4 +47,10 @@ export class ChannelRewardsAPI extends KickAPIClient {
       ["channel:rewards:write"]
     );
   }
+
+  async deleteChannelReward(id: string) {
+    await this.delete(`/channels/rewards/${id}`, true, [
+      "channel:rewards:write",
+    ]);
+  }
 }
