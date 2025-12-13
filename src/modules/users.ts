@@ -36,4 +36,26 @@ export class UsersAPI extends KickAPIClient {
     }
     return user;
   }
+
+  getUsersById(...ids: number[]) {
+    if (
+      this.options.tokenType === "user" &&
+      !this.options.scopes.includes("user:read")
+    ) {
+      throw new KickAPIError({
+        message: "You don't have enough permissions to use this API",
+        details: {
+          requiredScopes: ["user:read"],
+          tokenType: this.options.tokenType,
+          tokenScopes:
+            this.options.tokenType === "user" ? this.options.scopes : undefined,
+        },
+      });
+    }
+    const params = new URLSearchParams();
+    for (const id of ids) {
+      params.append("id", id.toString());
+    }
+    return this.get(`/users?${params}`, UsersSchema);
+  }
 }
