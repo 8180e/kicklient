@@ -3,6 +3,7 @@ import { KickAPIError } from "./errors.js";
 import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
 import { ChannelsAPI } from "./modules/channels.js";
+import { ChatAPI } from "./modules/chat.js";
 import { UsersAPI } from "./modules/users.js";
 
 interface ClientOptionsBase {
@@ -24,6 +25,7 @@ export class Kicklient {
   readonly users;
   readonly channels;
   readonly channelRewards;
+  readonly chat;
 
   private constructor(
     auth: KickOAuth,
@@ -33,6 +35,7 @@ export class Kicklient {
     this.users = new UsersAPI(auth, options);
     this.channels = new ChannelsAPI(auth, options);
     this.channelRewards = new ChannelRewardsAPI(auth, options);
+    this.chat = new ChatAPI(auth, options);
   }
 
   static async create(
