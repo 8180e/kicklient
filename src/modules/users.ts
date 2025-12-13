@@ -13,21 +13,9 @@ const UsersSchema = z.array(
 
 export class UsersAPI extends KickAPIClient {
   async getAuthenticatedUser() {
-    if (
-      this.options.tokenType === "app" ||
-      !this.options.scopes.includes("user:read")
-    ) {
-      throw new KickAPIError({
-        message: "You don't have enough permissions to use this API",
-        details: {
-          requiredScopes: ["user:read"],
-          tokenType: this.options.tokenType,
-          tokenScopes:
-            this.options.tokenType === "user" ? this.options.scopes : undefined,
-        },
-      });
-    }
-    const user = (await this.get("/users", UsersSchema))[0];
+    const user = (
+      await this.get("/users", UsersSchema, true, ["user:read"])
+    )[0];
     if (!user) {
       throw new KickAPIError({
         message:
@@ -38,24 +26,10 @@ export class UsersAPI extends KickAPIClient {
   }
 
   getUsersById(...ids: number[]) {
-    if (
-      this.options.tokenType === "user" &&
-      !this.options.scopes.includes("user:read")
-    ) {
-      throw new KickAPIError({
-        message: "You don't have enough permissions to use this API",
-        details: {
-          requiredScopes: ["user:read"],
-          tokenType: this.options.tokenType,
-          tokenScopes:
-            this.options.tokenType === "user" ? this.options.scopes : undefined,
-        },
-      });
-    }
     const params = new URLSearchParams();
     for (const id of ids) {
       params.append("id", id.toString());
     }
-    return this.get(`/users?${params}`, UsersSchema);
+    return this.get(`/users?${params}`, UsersSchema, false, ["user:read"]);
   }
 }

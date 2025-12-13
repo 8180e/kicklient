@@ -10,7 +10,14 @@ import {
   KickTooManyRequestsError,
   KickUnauthorizedError,
 } from "./errors.js";
-import type { KickOAuth } from "./auth.js";
+import type { KickOAuth, Scope } from "./auth.js";
+
+interface RequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: unknown;
+  requiredScopes?: Scope[] | undefined;
+  requireUserToken?: boolean | undefined;
+}
 
 async function getResponseData<T>(res: Response, ResponseSchema: z.ZodType<T>) {
   if (res.status === 204) {
@@ -30,10 +37,32 @@ export abstract class KickAPIClient {
 
   private async request(
     endpoint: string,
-    method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
-    body?: unknown,
+    {
+      method = "GET",
+      body,
+      requiredScopes,
+      requireUserToken,
+    }: RequestOptions = {},
     retry = false
   ): Promise<Response> {
+    const { options } = this;
+    if (
+      (requireUserToken && options.tokenType !== "user") ||
+      (requiredScopes &&
+        options.tokenType === "user" &&
+        !requiredScopes.every((scope) => options.scopes.includes(scope)))
+    ) {
+      throw new KickAPIError({
+        message: "You don't have enough permissions to use this API",
+        details: {
+          requiredScopes,
+          tokenType: options.tokenType,
+          tokenScopes:
+            options.tokenType === "user" ? options.scopes : undefined,
+        },
+      });
+    }
+
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
       headers: {
@@ -68,7 +97,11 @@ export abstract class KickAPIClient {
               this.options.accessToken = accessToken;
               this.options.refreshToken = refreshToken;
             }
-            return this.request(endpoint, method, body, true);
+            return this.request(
+              endpoint,
+              { method, body, requiredScopes, requireUserToken },
+              true
+            );
           }
           throw new KickUnauthorizedError(errorOptions);
         case 403:
@@ -90,35 +123,81 @@ export abstract class KickAPIClient {
     return res;
   }
 
-  protected async get<T>(endpoint: string, ResponseSchema: z.ZodType<T>) {
-    return getResponseData(await this.request(endpoint), ResponseSchema);
+  protected async get<T>(
+    endpoint: string,
+    ResponseSchema: z.ZodType<T>,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
+  ) {
+    return getResponseData(
+      await this.request(endpoint, { requireUserToken, requiredScopes }),
+      ResponseSchema
+    );
   }
 
-  protected post(endpoint: string, body: unknown) {
-    return this.request(endpoint, "POST", body);
+  protected post(
+    endpoint: string,
+    body: unknown,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
+  ) {
+    return this.request(endpoint, {
+      method: "POST",
+      body,
+      requireUserToken,
+      requiredScopes,
+    });
   }
 
   protected async postWithResponseData<T>(
     endpoint: string,
     body: unknown,
-    ResponseSchema: z.ZodType<T>
+    ResponseSchema: z.ZodType<T>,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
   ) {
-    return getResponseData(await this.post(endpoint, body), ResponseSchema);
+    return getResponseData(
+      await this.post(endpoint, body, requireUserToken, requiredScopes),
+      ResponseSchema
+    );
   }
 
-  protected patch(endpoint: string, body: unknown) {
-    return this.request(endpoint, "PATCH", body);
+  protected patch(
+    endpoint: string,
+    body: unknown,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
+  ) {
+    return this.request(endpoint, {
+      method: "PATCH",
+      body,
+      requireUserToken,
+      requiredScopes,
+    });
   }
 
   protected async patchWithResponseData<T>(
     endpoint: string,
     body: unknown,
-    ResponseSchema: z.ZodType<T>
+    ResponseSchema: z.ZodType<T>,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
   ) {
-    return getResponseData(await this.patch(endpoint, body), ResponseSchema);
+    return getResponseData(
+      await this.patch(endpoint, body, requireUserToken, requiredScopes),
+      ResponseSchema
+    );
   }
 
-  protected async delete(endpoint: string) {
-    await this.request(endpoint, "DELETE");
+  protected async delete(
+    endpoint: string,
+    requireUserToken?: boolean,
+    requiredScopes?: Scope[]
+  ) {
+    await this.request(endpoint, {
+      method: "DELETE",
+      requireUserToken,
+      requiredScopes,
+    });
   }
 }
