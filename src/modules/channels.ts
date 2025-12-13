@@ -28,6 +28,12 @@ const ChannelsSchema = z.array(
   })
 );
 
+interface UpdateLivestreamMetadataOptions {
+  categoryId?: number;
+  customTags?: string[];
+  streamTitle?: string;
+}
+
 export class ChannelsAPI extends KickAPIClient {
   async getAuthenticatedUserChannel() {
     const channel = (
@@ -88,5 +94,9 @@ export class ChannelsAPI extends KickAPIClient {
       ...channel,
       stream: { ...stream, startTime: new Date(startTime) },
     }));
+  }
+
+  async updateLivestreamMetadata(options: UpdateLivestreamMetadataOptions) {
+    await this.patch("/channels", options, true, ["channel:write"]);
   }
 }
