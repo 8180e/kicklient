@@ -28,4 +28,10 @@ export class ChatAPI extends KickAPIClient {
       ["chat:write"]
     );
   }
+
+  async deleteChatMessage(messageId: string) {
+    await this.delete(`/chat/${messageId}`, true, [
+      "moderation:chat_message:manage",
+    ]);
+  }
 }
