@@ -55,4 +55,22 @@ export class ChannelsAPI extends KickAPIClient {
       "channel:read",
     ]);
   }
+
+  getChannelsBySlug(...slugs: string[]) {
+    if (slugs.length > 50) {
+      throw new KickAPIError({ message: "Can not provide more than 50 slugs" });
+    }
+    if (slugs.some((slug) => slug.length > 25)) {
+      throw new KickAPIError({
+        message: "A slug can not have more than 25 characters",
+      });
+    }
+    const params = new URLSearchParams();
+    for (const slug of slugs) {
+      params.append("slug", slug);
+    }
+    return this.get(`/channels?${params}`, ChannelsSchema, false, [
+      "channel:read",
+    ]);
+  }
 }
