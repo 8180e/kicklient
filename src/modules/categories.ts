@@ -1,5 +1,4 @@
 import z from "zod";
-import { parseSchema } from "../utils.js";
 import { KickAPIClient } from "../api-client.js";
 
 const CategoriesSchema = z.array(
@@ -11,25 +10,19 @@ const CategorySchema = z.object({
   name: z.string(),
   tags: z.array(z.string()),
   thumbnail: z.string(),
-  viewerCount: z.number(),
+  viewer_count: z.number(),
 });
 
 export class CategoriesAPI extends KickAPIClient {
-  async getCategories(q: string, page?: number) {
+  getCategories(q: string, page?: number) {
     const params = new URLSearchParams({ q });
     if (page) {
       params.append("page", page.toString());
     }
-    return parseSchema(
-      CategoriesSchema,
-      await this.get(`/categories?${params}`)
-    );
+    return this.get(`/categories?${params}`, CategoriesSchema);
   }
 
-  async getCategoryById(categoryId: number) {
-    return parseSchema(
-      CategorySchema,
-      await this.get(`/categories/${categoryId}`)
-    );
+  getCategoryById(categoryId: number) {
+    return this.get(`/categories/${categoryId}`, CategorySchema);
   }
 }
