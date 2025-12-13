@@ -38,10 +38,16 @@ export class ChannelsAPI extends KickAPIClient {
         message: "Expected the API to return a channel, but got no channel",
       });
     }
-    return channel;
+    return {
+      ...channel,
+      stream: {
+        ...channel.stream,
+        startTime: new Date(channel.stream.startTime),
+      },
+    };
   }
 
-  getChannelsByBroadcasterId(...ids: number[]) {
+  async getChannelsByBroadcasterId(...ids: number[]) {
     if (ids.length > 50) {
       throw new KickAPIError({
         message: "Can not provide more than 50 user IDs",
@@ -51,12 +57,17 @@ export class ChannelsAPI extends KickAPIClient {
     for (const id of ids) {
       params.append("broadcaster_user_id", id.toString());
     }
-    return this.get(`/channels?${params}`, ChannelsSchema, false, [
-      "channel:read",
-    ]);
+    return (
+      await this.get(`/channels?${params}`, ChannelsSchema, false, [
+        "channel:read",
+      ])
+    ).map(({ stream: { startTime, ...stream }, ...channel }) => ({
+      ...channel,
+      stream: { ...stream, startTime: new Date(startTime) },
+    }));
   }
 
-  getChannelsBySlug(...slugs: string[]) {
+  async getChannelsBySlug(...slugs: string[]) {
     if (slugs.length > 50) {
       throw new KickAPIError({ message: "Can not provide more than 50 slugs" });
     }
@@ -69,8 +80,13 @@ export class ChannelsAPI extends KickAPIClient {
     for (const slug of slugs) {
       params.append("slug", slug);
     }
-    return this.get(`/channels?${params}`, ChannelsSchema, false, [
-      "channel:read",
-    ]);
+    return (
+      await this.get(`/channels?${params}`, ChannelsSchema, false, [
+        "channel:read",
+      ])
+    ).map(({ stream: { startTime, ...stream }, ...channel }) => ({
+      ...channel,
+      stream: { ...stream, startTime: new Date(startTime) },
+    }));
   }
 }
