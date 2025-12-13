@@ -25,7 +25,7 @@ async function getResponseData<T>(res: Response, ResponseSchema: z.ZodType<T>) {
 export abstract class KickAPIClient {
   constructor(
     private readonly auth: KickOAuth,
-    private readonly options: AppClientOptions | UserClientOptions
+    protected readonly options: AppClientOptions | UserClientOptions
   ) {}
 
   private async request(
