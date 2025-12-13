@@ -83,7 +83,9 @@ export abstract class KickAPIClient {
 
     if (!res.ok) {
       const data = await res.json();
-      const errorOptions = { details: { data, endpoint } };
+      const errorOptions = {
+        details: { data, endpoint, requestBody: reqBody },
+      };
       switch (res.status) {
         case 400:
           throw new KickBadRequestError(errorOptions);
