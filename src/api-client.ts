@@ -11,6 +11,7 @@ import {
   KickUnauthorizedError,
 } from "./errors.js";
 import type { KickOAuth, Scope } from "./auth.js";
+import decamelizeKeys from "decamelize-keys";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
@@ -71,7 +72,7 @@ export abstract class KickAPIClient {
           ? {}
           : { "Content-Type": "application/json" }),
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body && decamelizeKeys(body)),
     });
 
     if (!res.ok) {
