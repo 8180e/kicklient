@@ -28,11 +28,11 @@ const ChannelsSchema = z.array(
   })
 );
 
-interface UpdateLivestreamMetadataOptions {
-  categoryId?: number;
-  customTags?: string[];
-  streamTitle?: string;
-}
+const LivestreamMetadataOptionsSchema = z.object({
+  categoryId: z.int().optional(),
+  customTags: z.array(z.string()).optional(),
+  streamTitle: z.string().optional(),
+});
 
 export class ChannelsAPI extends KickAPIClient {
   async getAuthenticatedUserChannel() {
@@ -96,7 +96,15 @@ export class ChannelsAPI extends KickAPIClient {
     }));
   }
 
-  async updateLivestreamMetadata(options: UpdateLivestreamMetadataOptions) {
-    await this.patch("/channels", options, true, ["channel:write"]);
+  async updateLivestreamMetadata(
+    options: z.infer<typeof LivestreamMetadataOptionsSchema>
+  ) {
+    await this.patch(
+      "/channels",
+      options,
+      LivestreamMetadataOptionsSchema,
+      true,
+      ["channel:write"]
+    );
   }
 }
