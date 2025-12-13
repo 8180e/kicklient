@@ -30,6 +30,8 @@ const ChannelRewardOptionsSchema = z.object({
   title: z.string().max(50),
 });
 
+const ChannelRewardOptionsUpdateSchema = ChannelRewardOptionsSchema.partial();
+
 export class ChannelRewardsAPI extends KickAPIClient {
   getChannelRewards() {
     return this.get("/channels/rewards", ChannelRewardsSchema, true, [
@@ -52,5 +54,19 @@ export class ChannelRewardsAPI extends KickAPIClient {
     await this.delete(`/channels/rewards/${id}`, true, [
       "channel:rewards:write",
     ]);
+  }
+
+  updateChannelReward(
+    id: string,
+    options: z.infer<typeof ChannelRewardOptionsUpdateSchema>
+  ) {
+    return this.patchWithResponseData(
+      `/channels/rewards/${id}`,
+      options,
+      ChannelRewardOptionsUpdateSchema,
+      ChannelRewardSchema,
+      true,
+      ["channel:rewards:write"]
+    );
   }
 }
