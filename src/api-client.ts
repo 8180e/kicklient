@@ -66,25 +66,25 @@ export abstract class KickAPIClient {
       });
     }
 
-    const reqBody = RequestSchema
+    const parsedBody = RequestSchema
       ? parseSchema(RequestSchema, body, "Request body is invalid")
       : body;
+
+    const requestBody = parsedBody && decamelizeKeys(parsedBody);
 
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.options.accessToken}`,
-        ...(method === "GET" || method === "DELETE"
-          ? {}
-          : { "Content-Type": "application/json" }),
+        ...(body ? { "Content-Type": "application/json" } : {}),
       },
-      body: JSON.stringify(reqBody && decamelizeKeys(reqBody)),
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
       const data = await res.json();
       const errorOptions = {
-        details: { data, endpoint, requestBody: reqBody },
+        details: { data, endpoint, requestBody },
       };
       switch (res.status) {
         case 400:
@@ -219,12 +219,16 @@ export abstract class KickAPIClient {
   protected async delete(
     endpoint: string,
     requireUserToken?: boolean,
-    requiredScopes?: Scope[]
+    requiredScopes?: Scope[],
+    body?: unknown,
+    RequestSchema?: z.ZodType
   ) {
     await this.request(endpoint, {
       method: "DELETE",
       requireUserToken,
       requiredScopes,
+      body,
+      RequestSchema,
     });
   }
 }
