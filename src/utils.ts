@@ -26,7 +26,7 @@ export function formatData<T extends ObjectLike | readonly ObjectLike[]>(
   return camelcaseKeys(parseSchema(Schema, data), { deep: true });
 }
 
-export function formatRequestBody(Schema: z.ZodType, body: unknown) {
+export function formatRequestBody<T>(Schema: z.ZodType<T>, body: unknown) {
   const parsedBody = parseSchema(Schema, body, "Request body is invalid");
   return parsedBody && decamelizeKeys(parsedBody);
 }
