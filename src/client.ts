@@ -4,6 +4,7 @@ import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
 import { ChannelsAPI } from "./modules/channels.js";
 import { ChatAPI } from "./modules/chat.js";
+import { KicksAPI } from "./modules/kicks.js";
 import { LivestreamsAPI } from "./modules/livestreams.js";
 import { ModerationAPI } from "./modules/moderation.js";
 import { UsersAPI } from "./modules/users.js";
@@ -30,6 +31,7 @@ export class Kicklient {
   readonly chat;
   readonly moderation;
   readonly livestreams;
+  readonly kicks;
 
   private constructor(
     auth: KickOAuth,
@@ -42,6 +44,7 @@ export class Kicklient {
     this.chat = new ChatAPI(auth, options);
     this.moderation = new ModerationAPI(auth, options);
     this.livestreams = new LivestreamsAPI(auth, options);
+    this.kicks = new KicksAPI(auth, options);
   }
 
   static async create(
