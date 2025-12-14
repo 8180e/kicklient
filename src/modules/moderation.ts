@@ -7,10 +7,24 @@ const BanUserOptionsSchema = z.object({
   userId: z.int(),
 });
 
+const TimeoutUserOptionsSchema = BanUserOptionsSchema.extend({
+  duration: z.int().min(1).max(10080),
+});
+
 export class ModerationAPI extends KickAPIClient {
   async banUser(options: z.infer<typeof BanUserOptionsSchema>) {
     await this.post("/moderation/bans", options, BanUserOptionsSchema, true, [
       "moderation:ban",
     ]);
+  }
+
+  async timeoutUser(options: z.infer<typeof TimeoutUserOptionsSchema>) {
+    await this.post(
+      "/moderation/bans",
+      options,
+      TimeoutUserOptionsSchema,
+      true,
+      ["moderation:ban"]
+    );
   }
 }
