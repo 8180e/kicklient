@@ -2,6 +2,7 @@ import type { ObjectLike } from "camelcase-keys";
 import camelcaseKeys from "camelcase-keys";
 import z from "zod";
 import { KickAPIError } from "./errors.js";
+import decamelizeKeys from "decamelize-keys";
 
 export function parseSchema<T>(
   Schema: z.ZodType<T>,
@@ -23,4 +24,9 @@ export function formatData<T extends ObjectLike | readonly ObjectLike[]>(
   data: unknown
 ) {
   return camelcaseKeys(parseSchema(Schema, data), { deep: true });
+}
+
+export function formatRequestBody(Schema: z.ZodType, body: unknown) {
+  const parsedBody = parseSchema(Schema, body, "Request body is invalid");
+  return parsedBody && decamelizeKeys(parsedBody);
 }

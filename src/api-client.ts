@@ -1,6 +1,6 @@
 import z from "zod";
 import type { AppClientOptions, UserClientOptions } from "./client.js";
-import { formatData, parseSchema } from "./utils.js";
+import { formatData, formatRequestBody, parseSchema } from "./utils.js";
 import {
   KickAPIError,
   KickBadRequestError,
@@ -66,11 +66,7 @@ export abstract class KickAPIClient {
       });
     }
 
-    const parsedBody = RequestSchema
-      ? parseSchema(RequestSchema, body, "Request body is invalid")
-      : body;
-
-    const requestBody = parsedBody && decamelizeKeys(parsedBody);
+    const requestBody = RequestSchema && formatRequestBody(RequestSchema, body);
 
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
