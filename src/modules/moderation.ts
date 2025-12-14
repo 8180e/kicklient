@@ -11,6 +11,11 @@ const TimeoutUserOptionsSchema = BanUserOptionsSchema.extend({
   duration: z.int().min(1).max(10080),
 });
 
+const RemoveBanOptionsSchema = z.object({
+  broadcasterUserId: z.int(),
+  userId: z.int(),
+});
+
 export class ModerationAPI extends KickAPIClient {
   async banUser(options: z.infer<typeof BanUserOptionsSchema>) {
     await this.post("/moderation/bans", options, BanUserOptionsSchema, true, [
@@ -25,6 +30,16 @@ export class ModerationAPI extends KickAPIClient {
       TimeoutUserOptionsSchema,
       true,
       ["moderation:ban"]
+    );
+  }
+
+  async removeBan(options: z.infer<typeof RemoveBanOptionsSchema>) {
+    await this.delete(
+      "/moderation/bans",
+      true,
+      ["moderation:ban"],
+      options,
+      RemoveBanOptionsSchema
     );
   }
 }
