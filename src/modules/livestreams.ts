@@ -32,6 +32,8 @@ const LivestreamsSchema = z.array(
   })
 );
 
+const LivestreamStatsSchema = z.object({ total_count: z.number() });
+
 export class LivestreamsAPI extends KickAPIClient {
   async getLivestreams(options?: z.infer<typeof GetLivestreamsOptionsSchema>) {
     const params = new URLSearchParams();
@@ -60,5 +62,9 @@ export class LivestreamsAPI extends KickAPIClient {
         startedAt: new Date(startedAt),
       })
     );
+  }
+
+  getLivestreamsStats() {
+    return this.get("/livestreams/stats", LivestreamStatsSchema);
   }
 }
