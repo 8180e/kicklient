@@ -21,8 +21,7 @@ const KicksLeaderboardSchema = z.object({
 
 export class KicksAPI extends KickAPIClient {
   getKicksLeaderboard(top?: number) {
-    this.requireUserToken();
-    this.requireScopes("kicks:read");
+    this.requireScopesWithUserToken("kicks:read");
 
     const params = new URLSearchParams();
 

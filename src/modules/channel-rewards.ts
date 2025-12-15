@@ -34,14 +34,12 @@ const ChannelRewardOptionsUpdateSchema = ChannelRewardOptionsSchema.partial();
 
 export class ChannelRewardsAPI extends KickAPIClient {
   getChannelRewards() {
-    this.requireUserToken();
-    this.requireScopes("channel:rewards:write");
+    this.requireScopesWithUserToken("channel:rewards:write");
     return this.get("/channels/rewards", ChannelRewardsSchema);
   }
 
   createChannelReward(options: z.infer<typeof ChannelRewardOptionsSchema>) {
-    this.requireUserToken();
-    this.requireScopes("channel:rewards:write");
+    this.requireScopesWithUserToken("channel:rewards:write");
     return this.postWithResponseData(
       "/channels/rewards",
       options,
@@ -51,8 +49,7 @@ export class ChannelRewardsAPI extends KickAPIClient {
   }
 
   async deleteChannelReward(id: string) {
-    this.requireUserToken();
-    this.requireScopes("channel:rewards:write");
+    this.requireScopesWithUserToken("channel:rewards:write");
     await this.delete(`/channels/rewards/${id}`);
   }
 
@@ -60,8 +57,7 @@ export class ChannelRewardsAPI extends KickAPIClient {
     id: string,
     options: z.infer<typeof ChannelRewardOptionsUpdateSchema>
   ) {
-    this.requireUserToken();
-    this.requireScopes("channel:rewards:write");
+    this.requireScopesWithUserToken("channel:rewards:write");
     return this.patchWithResponseData(
       `/channels/rewards/${id}`,
       options,
