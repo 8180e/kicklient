@@ -25,13 +25,13 @@ export class ModerationAPI extends KickAPIClient {
 
   async timeoutUser(options: z.infer<typeof TimeoutUserOptionsSchema>) {
     this.requireUserToken();
-    this.requireScopes();
+    this.requireScopes("moderation:ban");
     await this.post("/moderation/bans", options, TimeoutUserOptionsSchema);
   }
 
   async removeBan(options: z.infer<typeof RemoveBanOptionsSchema>) {
     this.requireUserToken();
-    this.requireScopes();
+    this.requireScopes("moderation:ban");
     await this.delete("/moderation/bans", options, RemoveBanOptionsSchema);
   }
 }
