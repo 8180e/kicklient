@@ -1,6 +1,6 @@
 import z from "zod";
 import type { AppClientOptions, UserClientOptions } from "./client.js";
-import { formatData, formatRequestBody, parseSchema } from "./utils.js";
+import { formatData, formatRequestBody } from "./utils.js";
 import {
   KickAPIError,
   KickBadRequestError,
@@ -11,7 +11,6 @@ import {
   KickUnauthorizedError,
 } from "./errors.js";
 import type { KickOAuth, Scope } from "./auth.js";
-import decamelizeKeys from "decamelize-keys";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
