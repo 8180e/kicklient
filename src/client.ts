@@ -11,6 +11,11 @@ import { UsersAPI } from "./modules/users.js";
 
 interface ClientOptionsBase {
   accessToken: string;
+  onTokensRefreshed?(
+    tokens: Awaited<
+      ReturnType<KickOAuth["getAppAccessToken"] | KickOAuth["refreshToken"]>
+    >
+  ): unknown;
 }
 
 export interface AppClientOptions extends ClientOptionsBase {

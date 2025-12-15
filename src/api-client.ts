@@ -92,19 +92,21 @@ export abstract class KickAPIClient {
         case 401:
           if (retry) {
             if (this.options.tokenType === "app") {
-              this.options.accessToken = (
-                await this.auth.getAppAccessToken()
-              ).accessToken;
+              const tokenData = await this.auth.getAppAccessToken();
+              this.options.accessToken = tokenData.accessToken;
+              await this.options.onTokensRefreshed?.(tokenData);
             } else {
               if (!this.options.refreshToken) {
                 throw new KickUnauthorizedError(errorOptions);
               }
-              const { scopes, accessToken, refreshToken } =
-                await this.auth.refreshToken(this.options.refreshToken);
+              const tokenData = await this.auth.refreshToken(
+                this.options.refreshToken
+              );
 
-              this.options.scopes = scopes;
-              this.options.accessToken = accessToken;
-              this.options.refreshToken = refreshToken;
+              this.options.scopes = tokenData.scopes;
+              this.options.accessToken = tokenData.accessToken;
+              this.options.refreshToken = tokenData.refreshToken;
+              await this.options.onTokensRefreshed?.(tokenData);
             }
             return this.request(
               endpoint,
