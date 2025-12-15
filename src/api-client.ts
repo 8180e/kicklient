@@ -120,6 +120,9 @@ export abstract class KickAPIClient {
         case 404:
           throw new KickNotFoundError(errorOptions);
         case 429:
+          if (!retry) {
+            this.request(endpoint, { method, body, RequestSchema }, true);
+          }
           throw new KickTooManyRequestsError(errorOptions);
         case 500:
           throw new KickInternalServerError(errorOptions);
