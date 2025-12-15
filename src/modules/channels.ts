@@ -36,9 +36,9 @@ const LivestreamMetadataOptionsSchema = z.object({
 
 export class ChannelsAPI extends KickAPIClient {
   async getAuthenticatedUserChannel() {
-    const channel = (
-      await this.get("/channels", ChannelsSchema, true, ["channel:read"])
-    )[0];
+    this.requireUserToken();
+    this.requireScopes("channel:read");
+    const channel = (await this.get("/channels", ChannelsSchema))[0];
     if (!channel) {
       throw new KickAPIError({
         message: "Expected the API to return a channel, but got no channel",
@@ -54,6 +54,7 @@ export class ChannelsAPI extends KickAPIClient {
   }
 
   async getChannelsByBroadcasterId(...ids: number[]) {
+    this.requireScopes("channel:read");
     if (ids.length > 50) {
       throw new KickAPIError({
         message: "Can not provide more than 50 user IDs",
@@ -63,17 +64,16 @@ export class ChannelsAPI extends KickAPIClient {
     for (const id of ids) {
       params.append("broadcaster_user_id", id.toString());
     }
-    return (
-      await this.get(`/channels?${params}`, ChannelsSchema, false, [
-        "channel:read",
-      ])
-    ).map(({ stream: { startTime, ...stream }, ...channel }) => ({
-      ...channel,
-      stream: { ...stream, startTime: new Date(startTime) },
-    }));
+    return (await this.get(`/channels?${params}`, ChannelsSchema)).map(
+      ({ stream: { startTime, ...stream }, ...channel }) => ({
+        ...channel,
+        stream: { ...stream, startTime: new Date(startTime) },
+      })
+    );
   }
 
   async getChannelsBySlug(...slugs: string[]) {
+    this.requireScopes("channel:read");
     if (slugs.length > 50) {
       throw new KickAPIError({ message: "Can not provide more than 50 slugs" });
     }
@@ -86,25 +86,19 @@ export class ChannelsAPI extends KickAPIClient {
     for (const slug of slugs) {
       params.append("slug", slug);
     }
-    return (
-      await this.get(`/channels?${params}`, ChannelsSchema, false, [
-        "channel:read",
-      ])
-    ).map(({ stream: { startTime, ...stream }, ...channel }) => ({
-      ...channel,
-      stream: { ...stream, startTime: new Date(startTime) },
-    }));
+    return (await this.get(`/channels?${params}`, ChannelsSchema)).map(
+      ({ stream: { startTime, ...stream }, ...channel }) => ({
+        ...channel,
+        stream: { ...stream, startTime: new Date(startTime) },
+      })
+    );
   }
 
   async updateLivestreamMetadata(
     options: z.infer<typeof LivestreamMetadataOptionsSchema>
   ) {
-    await this.patch(
-      "/channels",
-      options,
-      LivestreamMetadataOptionsSchema,
-      true,
-      ["channel:write"]
-    );
+    this.requireUserToken();
+    this.requireScopes("channel:write");
+    await this.patch("/channels", options, LivestreamMetadataOptionsSchema);
   }
 }
