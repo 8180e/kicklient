@@ -34,10 +34,19 @@ export abstract class KickAPIClient {
     protected readonly options: AppClientOptions | UserClientOptions
   ) {}
 
-  protected requireUserToken() {
-    if (this.options.tokenType !== "user") {
+  protected requireScopesWithUserToken(...scopes: Scope[]) {
+    const { options } = this;
+    if (options.tokenType !== "user") {
       throw new KickAPIError({
         message: "This endpoint requires a user access token",
+      });
+    }
+
+    if (!scopes.every((scope) => options.scopes.includes(scope))) {
+      throw new KickAPIError({
+        message:
+          "Token does not have the required scopes to call this endpoint",
+        details: { requiredScopes: scopes, tokenScopes: options.scopes },
       });
     }
   }
