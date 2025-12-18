@@ -19,7 +19,7 @@ const PostMessageResponseSchema = z.object({
 
 export class ChatAPI extends KickAPIClient {
   postChatMessage(options: z.infer<typeof PostMessageOptionsSchema>) {
-    this.requireScopesWithUserToken("chat:write");
+    this.requireScopes("chat:write").withUserToken();
     return this.postWithResponseData(
       "/chat",
       options,
@@ -29,7 +29,7 @@ export class ChatAPI extends KickAPIClient {
   }
 
   async deleteChatMessage(messageId: string) {
-    this.requireScopesWithUserToken("moderation:chat_message:manage");
+    this.requireScopes("moderation:chat_message:manage").withUserToken();
     await this.delete(`/chat/${messageId}`);
   }
 }

@@ -36,7 +36,7 @@ const LivestreamMetadataOptionsSchema = z.object({
 
 export class ChannelsAPI extends KickAPIClient {
   async getAuthenticatedUserChannel() {
-    this.requireScopesWithUserToken("channel:read");
+    this.requireScopes("channel:read").withUserToken();
     const channel = (await this.get("/channels", ChannelsSchema))[0];
     if (!channel) {
       throw new KickAPIError({
@@ -96,7 +96,7 @@ export class ChannelsAPI extends KickAPIClient {
   async updateLivestreamMetadata(
     options: z.infer<typeof LivestreamMetadataOptionsSchema>
   ) {
-    this.requireScopesWithUserToken("channel:write");
+    this.requireScopes("channel:write").withUserToken();
     await this.patch("/channels", options, LivestreamMetadataOptionsSchema);
   }
 }

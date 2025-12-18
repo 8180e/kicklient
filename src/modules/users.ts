@@ -13,7 +13,7 @@ const UsersSchema = z.array(
 
 export class UsersAPI extends KickAPIClient {
   async getAuthenticatedUser() {
-    this.requireScopesWithUserToken("user:read");
+    this.requireScopes("user:read").withUserToken();
     const user = (await this.get("/users", UsersSchema))[0];
     if (!user) {
       throw new KickAPIError({

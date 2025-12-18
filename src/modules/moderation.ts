@@ -18,17 +18,17 @@ const RemoveBanOptionsSchema = z.object({
 
 export class ModerationAPI extends KickAPIClient {
   async banUser(options: z.infer<typeof BanUserOptionsSchema>) {
-    this.requireScopesWithUserToken("moderation:ban");
+    this.requireScopes("moderation:ban").withUserToken();
     await this.post("/moderation/bans", options, BanUserOptionsSchema);
   }
 
   async timeoutUser(options: z.infer<typeof TimeoutUserOptionsSchema>) {
-    this.requireScopesWithUserToken("moderation:ban");
+    this.requireScopes("moderation:ban").withUserToken();
     await this.post("/moderation/bans", options, TimeoutUserOptionsSchema);
   }
 
   async removeBan(options: z.infer<typeof RemoveBanOptionsSchema>) {
-    this.requireScopesWithUserToken("moderation:ban");
+    this.requireScopes("moderation:ban").withUserToken();
     await this.delete("/moderation/bans", options, RemoveBanOptionsSchema);
   }
 }
