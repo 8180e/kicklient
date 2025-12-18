@@ -53,6 +53,7 @@ export class Kicklient {
         });
       }
       const tokens = await auth.refreshToken(refreshToken);
+      await onTokensRefreshed?.(tokens);
       return new Kicklient(new UserToken(auth, tokens), onTokensRefreshed);
     }
 

@@ -87,7 +87,7 @@ export abstract class KickAPIClient {
         case 400:
           throw new KickBadRequestError(errorOptions);
         case 401:
-          if (retry) {
+          if (!retry) {
             await this.onTokensRefreshed?.(await this.token.refreshTokens());
             return this.request(
               endpoint,
