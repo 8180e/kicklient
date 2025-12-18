@@ -18,14 +18,14 @@ interface RequestOptions {
   RequestSchema?: z.ZodType | undefined;
 }
 
-async function getResponseData<T>(res: Response, ResponseSchema: z.ZodType<T>) {
-  if (res.status === 204) {
-    throw new KickAPIError({
-      message: "Response body does not include content",
-    });
-  }
+function extractData<T>(data: unknown, ResponseSchema: z.ZodType<T>) {
+  return formatData(z.object({ data: ResponseSchema }), data).data;
+}
 
-  return formatData(z.object({ data: ResponseSchema }), await res.json()).data;
+interface RequestReturn {
+  getData<T>(
+    ResponseSchema: z.ZodType<T>
+  ): Promise<ReturnType<typeof extractData<T>>>;
 }
 
 export abstract class KickAPIClient {
@@ -63,7 +63,7 @@ export abstract class KickAPIClient {
     endpoint: string,
     { method = "GET", body, RequestSchema }: RequestOptions = {},
     retry = false
-  ): Promise<Response> {
+  ): Promise<RequestReturn> {
     const requestBody = RequestSchema && formatRequestBody(RequestSchema, body);
 
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
@@ -128,45 +128,29 @@ export abstract class KickAPIClient {
       }
     }
 
-    return res;
+    return {
+      async getData<T>(ResponseSchema: z.ZodType<T>) {
+        if (res.status === 204) {
+          throw new KickAPIError({
+            message: "Response body does not include content",
+          });
+        }
+
+        return extractData(await res.json(), ResponseSchema);
+      },
+    };
   }
 
   protected async get<T>(endpoint: string, ResponseSchema: z.ZodType<T>) {
-    return getResponseData(await this.request(endpoint), ResponseSchema);
+    return (await this.request(endpoint)).getData(ResponseSchema);
   }
 
-  protected async post(
-    endpoint: string,
-    body: unknown,
-    RequestSchema: z.ZodType
-  ) {
-    const res = await this.request(endpoint, {
-      method: "POST",
-      body,
-      RequestSchema,
-    });
-    return {
-      getData<T>(ResponseSchema: z.ZodType<T>) {
-        return getResponseData(res, ResponseSchema);
-      },
-    };
+  protected post(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
+    return this.request(endpoint, { method: "POST", body, RequestSchema });
   }
 
-  protected async patch(
-    endpoint: string,
-    body: unknown,
-    RequestSchema: z.ZodType
-  ) {
-    const res = await this.request(endpoint, {
-      method: "PATCH",
-      body,
-      RequestSchema,
-    });
-    return {
-      getData<T>(ResponseSchema: z.ZodType<T>) {
-        return getResponseData(res, ResponseSchema);
-      },
-    };
+  protected patch(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
+    return this.request(endpoint, { method: "PATCH", body, RequestSchema });
   }
 
   protected async delete(
