@@ -135,36 +135,38 @@ export abstract class KickAPIClient {
     return getResponseData(await this.request(endpoint), ResponseSchema);
   }
 
-  protected post(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
-    return this.request(endpoint, { method: "POST", body, RequestSchema });
-  }
-
-  protected async postWithResponseData<T>(
+  protected async post(
     endpoint: string,
     body: unknown,
-    RequestSchema: z.ZodType,
-    ResponseSchema: z.ZodType<T>
+    RequestSchema: z.ZodType
   ) {
-    return getResponseData(
-      await this.post(endpoint, body, RequestSchema),
-      ResponseSchema
-    );
+    const res = await this.request(endpoint, {
+      method: "POST",
+      body,
+      RequestSchema,
+    });
+    return {
+      getData<T>(ResponseSchema: z.ZodType<T>) {
+        return getResponseData(res, ResponseSchema);
+      },
+    };
   }
 
-  protected patch(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
-    return this.request(endpoint, { method: "PATCH", body, RequestSchema });
-  }
-
-  protected async patchWithResponseData<T>(
+  protected async patch(
     endpoint: string,
     body: unknown,
-    RequestSchema: z.ZodType,
-    ResponseSchema: z.ZodType<T>
+    RequestSchema: z.ZodType
   ) {
-    return getResponseData(
-      await this.patch(endpoint, body, RequestSchema),
-      ResponseSchema
-    );
+    const res = await this.request(endpoint, {
+      method: "PATCH",
+      body,
+      RequestSchema,
+    });
+    return {
+      getData<T>(ResponseSchema: z.ZodType<T>) {
+        return getResponseData(res, ResponseSchema);
+      },
+    };
   }
 
   protected async delete(
