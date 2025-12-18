@@ -1,5 +1,4 @@
 import z from "zod";
-import type { AppClientOptions, UserClientOptions } from "./client.js";
 import { formatData, formatRequestBody } from "./utils.js";
 import {
   KickAPIError,
@@ -11,12 +10,19 @@ import {
   KickUnauthorizedError,
 } from "./errors.js";
 import type { KickOAuth, Scope } from "./auth.js";
+import { UserToken, type AppToken } from "./token.js";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   RequestSchema?: z.ZodType | undefined;
 }
+
+export type OnTokensRefreshed = (
+  tokens: Awaited<
+    ReturnType<KickOAuth["getAppAccessToken"] | KickOAuth["refreshToken"]>
+  >
+) => unknown;
 
 function extractData<T>(data: unknown, ResponseSchema: z.ZodType<T>) {
   return formatData(z.object({ data: ResponseSchema }), data).data;
@@ -30,21 +36,18 @@ interface RequestReturn {
 
 export abstract class KickAPIClient {
   constructor(
-    private readonly auth: KickOAuth,
-    protected readonly options: AppClientOptions | UserClientOptions
+    private readonly token: AppToken | UserToken,
+    private readonly onTokensRefreshed?: OnTokensRefreshed
   ) {}
 
   protected requireScopes(...scopes: Scope[]) {
-    const { options } = this;
-    const isUserToken = options.tokenType === "user";
-    if (
-      isUserToken &&
-      !scopes.every((scope) => options.scopes.includes(scope))
-    ) {
+    const { token } = this;
+    const isUserToken = token instanceof UserToken;
+    if (isUserToken && !scopes.every((scope) => token.scopes.includes(scope))) {
       throw new KickAPIError({
         message:
           "Token does not have the required scopes to call this endpoint",
-        details: { requiredScopes: scopes, tokenScopes: options.scopes },
+        details: { requiredScopes: scopes, tokenScopes: token.scopes },
       });
     }
 
@@ -69,7 +72,7 @@ export abstract class KickAPIClient {
     const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
       method,
       headers: {
-        Authorization: `Bearer ${this.options.accessToken}`,
+        Authorization: `Bearer ${this.token.accessToken}`,
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body: JSON.stringify(requestBody),
@@ -85,23 +88,7 @@ export abstract class KickAPIClient {
           throw new KickBadRequestError(errorOptions);
         case 401:
           if (retry) {
-            if (this.options.tokenType === "app") {
-              const tokenData = await this.auth.getAppAccessToken();
-              this.options.accessToken = tokenData.accessToken;
-              await this.options.onTokensRefreshed?.(tokenData);
-            } else {
-              if (!this.options.refreshToken) {
-                throw new KickUnauthorizedError(errorOptions);
-              }
-              const tokenData = await this.auth.refreshToken(
-                this.options.refreshToken
-              );
-
-              this.options.scopes = tokenData.scopes;
-              this.options.accessToken = tokenData.accessToken;
-              this.options.refreshToken = tokenData.refreshToken;
-              await this.options.onTokensRefreshed?.(tokenData);
-            }
+            await this.onTokensRefreshed?.(await this.token.refreshTokens());
             return this.request(
               endpoint,
               { method, body, RequestSchema },

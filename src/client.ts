@@ -1,3 +1,4 @@
+import type { OnTokensRefreshed } from "./api-client.js";
 import type { KickOAuth, Scope } from "./auth.js";
 import { KickAPIError } from "./errors.js";
 import { CategoriesAPI } from "./modules/categories.js";
@@ -8,24 +9,11 @@ import { KicksAPI } from "./modules/kicks.js";
 import { LivestreamsAPI } from "./modules/livestreams.js";
 import { ModerationAPI } from "./modules/moderation.js";
 import { UsersAPI } from "./modules/users.js";
+import { AppToken, UserToken } from "./token.js";
 
-interface ClientOptionsBase {
-  accessToken: string;
-  onTokensRefreshed?(
-    tokens: Awaited<
-      ReturnType<KickOAuth["getAppAccessToken"] | KickOAuth["refreshToken"]>
-    >
-  ): unknown;
-}
-
-export interface AppClientOptions extends ClientOptionsBase {
-  tokenType: "app";
-}
-
-export interface UserClientOptions extends ClientOptionsBase {
-  tokenType: "user";
-  scopes: Scope[];
-  refreshToken?: string | undefined;
+interface CreateClientOptions {
+  refreshToken?: string;
+  onTokensRefreshed?: OnTokensRefreshed;
 }
 
 export class Kicklient {
@@ -39,23 +27,23 @@ export class Kicklient {
   readonly kicks;
 
   private constructor(
-    auth: KickOAuth,
-    options: AppClientOptions | UserClientOptions
+    token: AppToken | UserToken,
+    onTokensRefreshed?: OnTokensRefreshed
   ) {
-    this.categories = new CategoriesAPI(auth, options);
-    this.users = new UsersAPI(auth, options);
-    this.channels = new ChannelsAPI(auth, options);
-    this.channelRewards = new ChannelRewardsAPI(auth, options);
-    this.chat = new ChatAPI(auth, options);
-    this.moderation = new ModerationAPI(auth, options);
-    this.livestreams = new LivestreamsAPI(auth, options);
-    this.kicks = new KicksAPI(auth, options);
+    this.categories = new CategoriesAPI(token, onTokensRefreshed);
+    this.users = new UsersAPI(token, onTokensRefreshed);
+    this.channels = new ChannelsAPI(token, onTokensRefreshed);
+    this.channelRewards = new ChannelRewardsAPI(token, onTokensRefreshed);
+    this.chat = new ChatAPI(token, onTokensRefreshed);
+    this.moderation = new ModerationAPI(token, onTokensRefreshed);
+    this.livestreams = new LivestreamsAPI(token, onTokensRefreshed);
+    this.kicks = new KicksAPI(token, onTokensRefreshed);
   }
 
   static async create(
     auth: KickOAuth,
     accessToken: string,
-    refreshToken?: string
+    { refreshToken, onTokensRefreshed }: CreateClientOptions
   ) {
     const tokenInfo = await auth.introspectToken(accessToken);
     if (!tokenInfo.active) {
@@ -65,18 +53,25 @@ export class Kicklient {
         });
       }
       const tokens = await auth.refreshToken(refreshToken);
-      return new Kicklient(auth, { ...tokens, tokenType: "user" });
+      return new Kicklient(new UserToken(auth, tokens), onTokensRefreshed);
     }
 
     if (tokenInfo.tokenType === "app") {
-      return new Kicklient(auth, { accessToken, tokenType: "app" });
+      return new Kicklient(
+        new AppToken(auth, { accessToken, ...tokenInfo }),
+        onTokensRefreshed
+      );
     }
 
-    return new Kicklient(auth, {
-      accessToken,
-      refreshToken,
-      scopes: tokenInfo.scopes,
-      tokenType: "user",
-    });
+    if (!refreshToken) {
+      throw new KickAPIError({
+        message: "User tokens need a refresh token to be provided",
+      });
+    }
+
+    return new Kicklient(
+      new UserToken(auth, { accessToken, refreshToken, ...tokenInfo }),
+      onTokensRefreshed
+    );
   }
 }
