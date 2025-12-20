@@ -72,4 +72,12 @@ export class EventsAPI extends KickAPIClient {
       )
     ).getData(CreateEventResponseSchema);
   }
+
+  deleteEventsSubscriptions(...ids: string[]) {
+    const params = new URLSearchParams();
+    for (const id of ids) {
+      params.append("id", id);
+    }
+    return this.delete(`/events/subscriptions?${params}`);
+  }
 }
