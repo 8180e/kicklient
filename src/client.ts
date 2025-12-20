@@ -1,5 +1,5 @@
 import type { OnTokensRefreshed } from "./api-client.js";
-import type { KickOAuth, Scope } from "./auth.js";
+import type { KickOAuth } from "./auth.js";
 import { KickAPIError } from "./errors.js";
 import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
@@ -11,12 +11,7 @@ import { ModerationAPI } from "./modules/moderation.js";
 import { UsersAPI } from "./modules/users.js";
 import { AppToken, UserToken } from "./token.js";
 
-interface CreateClientOptions {
-  refreshToken?: string;
-  onTokensRefreshed?: OnTokensRefreshed;
-}
-
-export class Kicklient {
+abstract class BaseClient {
   readonly categories;
   readonly users;
   readonly channels;
@@ -26,7 +21,7 @@ export class Kicklient {
   readonly livestreams;
   readonly kicks;
 
-  private constructor(
+  protected constructor(
     token: AppToken | UserToken,
     onTokensRefreshed?: OnTokensRefreshed
   ) {
@@ -39,11 +34,33 @@ export class Kicklient {
     this.livestreams = new LivestreamsAPI(token, onTokensRefreshed);
     this.kicks = new KicksAPI(token, onTokensRefreshed);
   }
+}
 
+export class AppClient extends BaseClient {
   static async create(
     auth: KickOAuth,
     accessToken: string,
-    { refreshToken, onTokensRefreshed }: CreateClientOptions
+    onTokensRefreshed?: OnTokensRefreshed
+  ) {
+    const tokenInfo = await auth.introspectToken(accessToken);
+    if (!tokenInfo.active) {
+      const tokens = await auth.getAppAccessToken();
+      await onTokensRefreshed?.(tokens);
+      return new AppClient(new AppToken(auth, tokens), onTokensRefreshed);
+    }
+    return new AppClient(
+      new AppToken(auth, { accessToken, ...tokenInfo }),
+      onTokensRefreshed
+    );
+  }
+}
+
+export class UserClient extends BaseClient {
+  static async create(
+    auth: KickOAuth,
+    accessToken: string,
+    refreshToken: string,
+    onTokensRefreshed?: OnTokensRefreshed
   ) {
     const tokenInfo = await auth.introspectToken(accessToken);
     if (!tokenInfo.active) {
@@ -54,23 +71,17 @@ export class Kicklient {
       }
       const tokens = await auth.refreshToken(refreshToken);
       await onTokensRefreshed?.(tokens);
-      return new Kicklient(new UserToken(auth, tokens), onTokensRefreshed);
+      return new UserClient(new UserToken(auth, tokens), onTokensRefreshed);
     }
 
     if (tokenInfo.tokenType === "app") {
-      return new Kicklient(
-        new AppToken(auth, { accessToken, ...tokenInfo }),
-        onTokensRefreshed
-      );
-    }
-
-    if (!refreshToken) {
       throw new KickAPIError({
-        message: "User tokens need a refresh token to be provided",
+        message:
+          "You provided an app token to a UserClient. Please use AppClient instead.",
       });
     }
 
-    return new Kicklient(
+    return new UserClient(
       new UserToken(auth, { accessToken, refreshToken, ...tokenInfo }),
       onTokensRefreshed
     );

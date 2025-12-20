@@ -1,2 +1,2 @@
 export { KickOAuth } from "./auth.js";
-export { Kicklient } from "./client.js";
+export { AppClient, UserClient } from "./client.js";
