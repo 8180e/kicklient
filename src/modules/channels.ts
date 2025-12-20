@@ -35,23 +35,6 @@ const LivestreamMetadataOptionsSchema = z.object({
 });
 
 export class ChannelsAPI extends KickAPIClient {
-  async getAuthenticatedUserChannel() {
-    this.requireScopes("channel:read").withUserToken();
-    const channel = (await this.get("/channels", ChannelsSchema))[0];
-    if (!channel) {
-      throw new KickAPIError({
-        message: "Expected the API to return a channel, but got no channel",
-      });
-    }
-    return {
-      ...channel,
-      stream: {
-        ...channel.stream,
-        startTime: new Date(channel.stream.startTime),
-      },
-    };
-  }
-
   async getChannelsByBroadcasterId(...ids: number[]) {
     this.requireScopes("channel:read");
     if (ids.length > 50) {
@@ -92,11 +75,30 @@ export class ChannelsAPI extends KickAPIClient {
       })
     );
   }
+}
+
+export class UserChannelsAPI extends ChannelsAPI {
+  async getAuthenticatedUserChannel() {
+    this.requireScopes("channel:read");
+    const channel = (await this.get("/channels", ChannelsSchema))[0];
+    if (!channel) {
+      throw new KickAPIError({
+        message: "Expected the API to return a channel, but got no channel",
+      });
+    }
+    return {
+      ...channel,
+      stream: {
+        ...channel.stream,
+        startTime: new Date(channel.stream.startTime),
+      },
+    };
+  }
 
   async updateLivestreamMetadata(
     options: z.infer<typeof LivestreamMetadataOptionsSchema>
   ) {
-    this.requireScopes("channel:write").withUserToken();
+    this.requireScopes("channel:write");
     await this.patch("/channels", options, LivestreamMetadataOptionsSchema);
   }
 }

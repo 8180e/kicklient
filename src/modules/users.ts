@@ -12,8 +12,19 @@ const UsersSchema = z.array(
 );
 
 export class UsersAPI extends KickAPIClient {
+  getUsersById(...ids: number[]) {
+    this.requireScopes("user:read");
+    const params = new URLSearchParams();
+    for (const id of ids) {
+      params.append("id", id.toString());
+    }
+    return this.get(`/users?${params}`, UsersSchema);
+  }
+}
+
+export class UserUsersAPI extends UsersAPI {
   async getAuthenticatedUser() {
-    this.requireScopes("user:read").withUserToken();
+    this.requireScopes("user:read");
     const user = (await this.get("/users", UsersSchema))[0];
     if (!user) {
       throw new KickAPIError({
@@ -22,14 +33,5 @@ export class UsersAPI extends KickAPIClient {
       });
     }
     return user;
-  }
-
-  getUsersById(...ids: number[]) {
-    this.requireScopes("user:read");
-    const params = new URLSearchParams();
-    for (const id of ids) {
-      params.append("id", id.toString());
-    }
-    return this.get(`/users?${params}`, UsersSchema);
   }
 }
