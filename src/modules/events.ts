@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
 
 const EventSchema = z.enum([
   "chat.message.sent",
@@ -79,5 +79,32 @@ export class EventsAPI extends KickAPIClient {
       params.append("id", id);
     }
     return this.delete(`/events/subscriptions?${params}`);
+  }
+}
+
+export class UserEventsAPI extends UserKickAPIClient {
+  private readonly api = new EventsAPI(this.token, this.onTokensRefreshed);
+
+  getEventsSubscriptions(broadcasterUserId?: number) {
+    return this.api.getEventsSubscriptions(broadcasterUserId);
+  }
+
+  async createEventsSubscriptions(events: z.infer<typeof EventSchema>[]) {
+    this.requireScopes("events:subscribe");
+    return (
+      await this.post(
+        "/events/subscriptions",
+        {
+          events: events.map((name) => ({ name, version: 1 })),
+          method: "webhook",
+        },
+        CreateEventRequestSchema
+      )
+    ).getData(CreateEventResponseSchema);
+  }
+
+  deleteEventsSubscriptions(...ids: string[]) {
+    this.requireScopes("events:subscribe");
+    return this.api.deleteEventsSubscriptions(...ids);
   }
 }

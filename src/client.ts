@@ -5,7 +5,7 @@ import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
 import { ChannelsAPI, UserChannelsAPI } from "./modules/channels.js";
 import { ChatAPI } from "./modules/chat.js";
-import { EventsAPI } from "./modules/events.js";
+import { EventsAPI, UserEventsAPI } from "./modules/events.js";
 import { KicksAPI } from "./modules/kicks.js";
 import { LivestreamsAPI } from "./modules/livestreams.js";
 import { ModerationAPI } from "./modules/moderation.js";
@@ -17,7 +17,6 @@ abstract class BaseClient {
   readonly users;
   readonly channels;
   readonly livestreams;
-  readonly events;
 
   protected constructor(
     token: AppToken | UserToken,
@@ -27,11 +26,17 @@ abstract class BaseClient {
     this.users = new UsersAPI(token, onTokensRefreshed);
     this.channels = new ChannelsAPI(token, onTokensRefreshed);
     this.livestreams = new LivestreamsAPI(token, onTokensRefreshed);
-    this.events = new EventsAPI(token, onTokensRefreshed);
   }
 }
 
 export class AppClient extends BaseClient {
+  readonly events;
+
+  private constructor(token: AppToken, onTokensRefreshed?: OnTokensRefreshed) {
+    super(token, onTokensRefreshed);
+    this.events = new EventsAPI(token, onTokensRefreshed);
+  }
+
   static async create(
     auth: KickOAuth,
     accessToken: string,
@@ -57,6 +62,7 @@ export class UserClient extends BaseClient {
   readonly kicks;
   readonly moderation;
   readonly users;
+  readonly events;
 
   constructor(token: UserToken, onTokensRefreshed?: OnTokensRefreshed) {
     super(token, onTokensRefreshed);
@@ -67,6 +73,7 @@ export class UserClient extends BaseClient {
     this.kicks = new KicksAPI(token, onTokensRefreshed);
     this.moderation = new ModerationAPI(token, onTokensRefreshed);
     this.users = new UserUsersAPI(token, onTokensRefreshed);
+    this.events = new UserEventsAPI(token, onTokensRefreshed);
   }
 
   static async create(
