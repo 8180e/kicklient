@@ -42,24 +42,16 @@ export abstract class KickAPIClient {
 
   protected requireScopes(...scopes: Scope[]) {
     const { token } = this;
-    const isUserToken = token instanceof UserToken;
-    if (isUserToken && !scopes.every((scope) => token.scopes.includes(scope))) {
+    if (
+      token instanceof UserToken &&
+      !scopes.every((scope) => token.scopes.includes(scope))
+    ) {
       throw new KickAPIError({
         message:
           "Token does not have the required scopes to call this endpoint",
         details: { requiredScopes: scopes, tokenScopes: token.scopes },
       });
     }
-
-    return {
-      withUserToken() {
-        if (!isUserToken) {
-          throw new KickAPIError({
-            message: "This endpoint requires a user access token",
-          });
-        }
-      },
-    };
   }
 
   private async request(
