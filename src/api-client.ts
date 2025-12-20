@@ -36,23 +36,9 @@ interface RequestReturn {
 
 export abstract class KickAPIClient {
   constructor(
-    private readonly token: AppToken | UserToken,
-    private readonly onTokensRefreshed?: OnTokensRefreshed
+    protected readonly token: AppToken | UserToken,
+    protected readonly onTokensRefreshed?: OnTokensRefreshed
   ) {}
-
-  protected requireScopes(...scopes: Scope[]) {
-    const { token } = this;
-    if (
-      token instanceof UserToken &&
-      !scopes.every((scope) => token.scopes.includes(scope))
-    ) {
-      throw new KickAPIError({
-        message:
-          "Token does not have the required scopes to call this endpoint",
-        details: { requiredScopes: scopes, tokenScopes: token.scopes },
-      });
-    }
-  }
 
   private async request(
     endpoint: string,
@@ -138,5 +124,25 @@ export abstract class KickAPIClient {
     RequestSchema?: z.ZodType
   ) {
     await this.request(endpoint, { method: "DELETE", body, RequestSchema });
+  }
+}
+
+export abstract class UserKickAPIClient extends KickAPIClient {
+  constructor(
+    protected readonly token: UserToken,
+    onTokensRefreshed?: OnTokensRefreshed
+  ) {
+    super(token, onTokensRefreshed);
+  }
+
+  protected requireScopes(...scopes: Scope[]) {
+    const { token } = this;
+    if (!scopes.every((scope) => token.scopes.includes(scope))) {
+      throw new KickAPIError({
+        message:
+          "Token does not have the required scopes to call this endpoint",
+        details: { requiredScopes: scopes, tokenScopes: token.scopes },
+      });
+    }
   }
 }
