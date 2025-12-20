@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { UserKickAPIClient } from "../api-client.js";
 import { parseSchema } from "../utils.js";
 
 const GetKicksLeaderboardOptionsSchema = z.int().min(1).max(100);
@@ -19,7 +19,7 @@ const KicksLeaderboardSchema = z.object({
   week: KicksDataSchema,
 });
 
-export class KicksAPI extends KickAPIClient {
+export class KicksAPI extends UserKickAPIClient {
   getKicksLeaderboard(top?: number) {
     this.requireScopes("kicks:read");
 

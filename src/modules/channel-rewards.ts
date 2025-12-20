@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { UserKickAPIClient } from "../api-client.js";
 
 const ChannelRewardSchema = z.object({
   background_color: z.string(),
@@ -32,7 +32,7 @@ const ChannelRewardOptionsSchema = z.object({
 
 const ChannelRewardOptionsUpdateSchema = ChannelRewardOptionsSchema.partial();
 
-export class ChannelRewardsAPI extends KickAPIClient {
+export class ChannelRewardsAPI extends UserKickAPIClient {
   getChannelRewards() {
     this.requireScopes("channel:rewards:write");
     return this.get("/channels/rewards", ChannelRewardsSchema);

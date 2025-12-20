@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
 import { KickAPIError } from "../errors.js";
 
 const ChannelsSchema = z.array(
@@ -36,7 +36,6 @@ const LivestreamMetadataOptionsSchema = z.object({
 
 export class ChannelsAPI extends KickAPIClient {
   async getChannelsByBroadcasterId(...ids: number[]) {
-    this.requireScopes("channel:read");
     if (ids.length > 50) {
       throw new KickAPIError({
         message: "Can not provide more than 50 user IDs",
@@ -55,7 +54,6 @@ export class ChannelsAPI extends KickAPIClient {
   }
 
   async getChannelsBySlug(...slugs: string[]) {
-    this.requireScopes("channel:read");
     if (slugs.length > 50) {
       throw new KickAPIError({ message: "Can not provide more than 50 slugs" });
     }
@@ -77,7 +75,9 @@ export class ChannelsAPI extends KickAPIClient {
   }
 }
 
-export class UserChannelsAPI extends ChannelsAPI {
+export class UserChannelsAPI extends UserKickAPIClient {
+  private readonly api = new ChannelsAPI(this.token, this.onTokensRefreshed);
+
   async getAuthenticatedUserChannel() {
     this.requireScopes("channel:read");
     const channel = (await this.get("/channels", ChannelsSchema))[0];
@@ -100,5 +100,15 @@ export class UserChannelsAPI extends ChannelsAPI {
   ) {
     this.requireScopes("channel:write");
     await this.patch("/channels", options, LivestreamMetadataOptionsSchema);
+  }
+
+  getChannelsByBroadcasterId(...ids: number[]) {
+    this.requireScopes("channel:read");
+    return this.api.getChannelsByBroadcasterId(...ids);
+  }
+
+  getChannelsBySlug(...slugs: string[]) {
+    this.requireScopes("channel:read");
+    return this.api.getChannelsBySlug(...slugs);
   }
 }

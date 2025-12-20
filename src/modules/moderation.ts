@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { UserKickAPIClient } from "../api-client.js";
 
 const BanUserOptionsSchema = z.object({
   broadcasterUserId: z.int(),
@@ -16,7 +16,7 @@ const RemoveBanOptionsSchema = z.object({
   userId: z.int(),
 });
 
-export class ModerationAPI extends KickAPIClient {
+export class ModerationAPI extends UserKickAPIClient {
   async banUser(options: z.infer<typeof BanUserOptionsSchema>) {
     this.requireScopes("moderation:ban");
     await this.post("/moderation/bans", options, BanUserOptionsSchema);

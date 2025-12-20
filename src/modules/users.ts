@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
 import { KickAPIError } from "../errors.js";
 
 const UsersSchema = z.array(
@@ -13,7 +13,6 @@ const UsersSchema = z.array(
 
 export class UsersAPI extends KickAPIClient {
   getUsersById(...ids: number[]) {
-    this.requireScopes("user:read");
     const params = new URLSearchParams();
     for (const id of ids) {
       params.append("id", id.toString());
@@ -22,7 +21,9 @@ export class UsersAPI extends KickAPIClient {
   }
 }
 
-export class UserUsersAPI extends UsersAPI {
+export class UserUsersAPI extends UserKickAPIClient {
+  private readonly api = new UsersAPI(this.token, this.onTokensRefreshed);
+
   async getAuthenticatedUser() {
     this.requireScopes("user:read");
     const user = (await this.get("/users", UsersSchema))[0];
@@ -33,5 +34,10 @@ export class UserUsersAPI extends UsersAPI {
       });
     }
     return user;
+  }
+
+  getUsersById(...ids: number[]) {
+    this.requireScopes("user:read");
+    return this.api.getUsersById(...ids);
   }
 }

@@ -1,5 +1,5 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import { UserKickAPIClient } from "../api-client.js";
 
 const PostMessageOptionsSchema = z.intersection(
   z.object({
@@ -17,7 +17,7 @@ const PostMessageResponseSchema = z.object({
   message_id: z.string(),
 });
 
-export class ChatAPI extends KickAPIClient {
+export class ChatAPI extends UserKickAPIClient {
   async postChatMessage(options: z.infer<typeof PostMessageOptionsSchema>) {
     this.requireScopes("chat:write");
     return (
