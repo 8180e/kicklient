@@ -5,6 +5,7 @@ import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelRewardsAPI } from "./modules/channel-rewards.js";
 import { ChannelsAPI, UserChannelsAPI } from "./modules/channels.js";
 import { ChatAPI } from "./modules/chat.js";
+import { EventsAPI } from "./modules/events.js";
 import { KicksAPI } from "./modules/kicks.js";
 import { LivestreamsAPI } from "./modules/livestreams.js";
 import { ModerationAPI } from "./modules/moderation.js";
@@ -16,6 +17,7 @@ abstract class BaseClient {
   readonly users;
   readonly channels;
   readonly livestreams;
+  readonly events;
 
   protected constructor(
     token: AppToken | UserToken,
@@ -25,6 +27,7 @@ abstract class BaseClient {
     this.users = new UsersAPI(token, onTokensRefreshed);
     this.channels = new ChannelsAPI(token, onTokensRefreshed);
     this.livestreams = new LivestreamsAPI(token, onTokensRefreshed);
+    this.events = new EventsAPI(token, onTokensRefreshed);
   }
 }
 
