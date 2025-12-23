@@ -1,7 +1,7 @@
 import z from "zod";
 import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
 
-const EventSchema = z.enum([
+export const EventSchema = z.enum([
   "chat.message.sent",
   "channel.followed",
   "channel.subscription.renewal",
@@ -40,6 +40,8 @@ const CreateEventResponseSchema = z.array(
     version: z.number(),
   })
 );
+
+export type KickEvent = z.infer<typeof EventSchema>;
 
 export class EventsAPI extends KickAPIClient {
   async getEventsSubscriptions(broadcasterUserId?: number) {
@@ -89,7 +91,7 @@ export class UserEventsAPI extends UserKickAPIClient {
     return this.api.getEventsSubscriptions(broadcasterUserId);
   }
 
-  async createEventsSubscriptions(events: z.infer<typeof EventSchema>[]) {
+  async createEventsSubscriptions(events: KickEvent[]) {
     this.requireScopes("events:subscribe");
     return (
       await this.post(
