@@ -30,3 +30,6 @@ export function formatRequestBody<T>(Schema: z.ZodType<T>, body: unknown) {
   const parsedBody = parseSchema(Schema, body, "Request body is invalid");
   return parsedBody && decamelizeKeys(parsedBody);
 }
+
+export type FormattedType<T extends ObjectLike | readonly ObjectLike[]> =
+  ReturnType<typeof formatData<z.infer<T>>>;
