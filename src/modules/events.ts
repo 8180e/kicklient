@@ -49,12 +49,16 @@ export class EventsAPI extends KickAPIClient {
     if (broadcasterUserId) {
       params.append("broadcaster_user_id", broadcasterUserId.toString());
     }
+    const client = this;
     return (
       await this.get(`/events/subscriptions?${params}`, EventSubscriptionSchema)
     ).map(({ createdAt, updatedAt, ...subscription }) => ({
       createdAt: new Date(createdAt),
       updatedAt: new Date(updatedAt),
       ...subscription,
+      async delete() {
+        await client.deleteEventsSubscriptions(subscription.id);
+      },
     }));
   }
 
@@ -62,17 +66,25 @@ export class EventsAPI extends KickAPIClient {
     broadcasterUserId: number,
     events: z.infer<typeof EventSchema>[]
   ) {
+    const client = this;
     return (
-      await this.post(
-        "/events/subscriptions",
-        {
-          broadcasterUserId,
-          events: events.map((name) => ({ name, version: 1 })),
-          method: "webhook",
-        },
-        CreateEventRequestSchema
-      )
-    ).getData(CreateEventResponseSchema);
+      await (
+        await this.post(
+          "/events/subscriptions",
+          {
+            broadcasterUserId,
+            events: events.map((name) => ({ name, version: 1 })),
+            method: "webhook",
+          },
+          CreateEventRequestSchema
+        )
+      ).getData(CreateEventResponseSchema)
+    ).map((subscription) => ({
+      ...subscription,
+      async delete() {
+        await client.deleteEventsSubscriptions(subscription.subscriptionId);
+      },
+    }));
   }
 
   deleteEventsSubscriptions(...ids: string[]) {
