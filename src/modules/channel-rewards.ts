@@ -33,7 +33,7 @@ const ChannelRewardOptionsSchema = z.object({
 
 const ChannelRewardOptionsUpdateSchema = ChannelRewardOptionsSchema.partial();
 
-type UpdateChannelRewardOptions = z.infer<
+export type UpdateChannelRewardOptions = z.infer<
   typeof ChannelRewardOptionsUpdateSchema
 >;
 

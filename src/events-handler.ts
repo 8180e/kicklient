@@ -4,6 +4,7 @@ import { AppClient, type UserClient } from "./client.js";
 import { EventSchema, type KickEvent } from "./modules/events.js";
 import z from "zod";
 import { formatData, parseSchema } from "./utils.js";
+import type { UpdateChannelRewardOptions } from "./modules/channel-rewards.js";
 
 const PublicKeySchema = z.object({
   data: z.object({ public_key: z.string() }),
@@ -135,99 +136,357 @@ const eventSchemas = {
   }),
 };
 
-const eventDataFormatters = {
-  "chat.message.sent"(data: unknown) {
-    return formatData(eventSchemas["chat.message.sent"], data);
-  },
-  "channel.followed"(data: unknown) {
-    return formatData(eventSchemas["channel.followed"], data);
-  },
-  "channel.subscription.renewal"(data: unknown) {
-    const { createdAt, expiresAt, ...formattedData } = formatData(
-      eventSchemas["channel.subscription.renewal"],
-      data
-    );
-    return {
-      ...formattedData,
-      createdAt: new Date(createdAt),
-      expiresAt: new Date(expiresAt),
-    };
-  },
-  "channel.subscription.gifts"(data: unknown) {
-    const { createdAt, expiresAt, ...formattedData } = formatData(
-      eventSchemas["channel.subscription.gifts"],
-      data
-    );
-    return {
-      ...formattedData,
-      createdAt: new Date(createdAt),
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
-    };
-  },
-  "channel.subscription.new"(data: unknown) {
-    const { createdAt, expiresAt, ...formattedData } = formatData(
-      eventSchemas["channel.subscription.new"],
-      data
-    );
-    return {
-      ...formattedData,
-      createdAt: new Date(createdAt),
-      expiresAt: new Date(expiresAt),
-    };
-  },
-  "channel.reward.redemption.updated"(data: unknown) {
-    const { redeemedAt, ...formattedData } = formatData(
-      eventSchemas["channel.reward.redemption.updated"],
-      data
-    );
-    return { ...formattedData, redeemedAt: new Date(redeemedAt) };
-  },
-  "livestream.status.updated"(data: unknown) {
-    const { startedAt, endedAt, ...formattedData } = formatData(
-      eventSchemas["livestream.status.updated"],
-      data
-    );
-    return {
-      ...formattedData,
-      startedAt: new Date(startedAt),
-      endedAt: new Date(endedAt || 0),
-    };
-  },
-  "livestream.metadata.updated"(data: unknown) {
-    return formatData(eventSchemas["livestream.metadata.updated"], data);
-  },
-  "moderation.banned"(data: unknown) {
-    const {
-      metadata: { createdAt, expiresAt, ...metadata },
-      ...formattedData
-    } = formatData(eventSchemas["moderation.banned"], data);
-    return {
-      ...formattedData,
-      metadata: {
-        ...metadata,
+function createUserActions(client: UserClient | AppClient, userId: number) {
+  return {
+    async getChannel() {
+      return (await client.channels.getChannelsByBroadcasterId(userId))[0]!;
+    },
+    async getLivestream() {
+      return (
+        await client.livestreams.getLivestreams({ broadcasterUserId: userId })
+      )[0]!;
+    },
+  };
+}
+
+function createUserModerationActions(
+  client: UserClient,
+  userId: number,
+  broadcasterUserId: number
+) {
+  return {
+    async ban(reason?: string) {
+      await client.moderation.banUser({ broadcasterUserId, userId, reason });
+    },
+    async timeout(duration: number, reason?: string) {
+      await client.moderation.timeoutUser({
+        broadcasterUserId,
+        userId,
+        duration,
+        reason,
+      });
+    },
+    async removeBan() {
+      await client.moderation.removeBan({ broadcasterUserId, userId });
+    },
+  };
+}
+
+function createEventDataFormatters(client: AppClient | UserClient) {
+  return {
+    "chat.message.sent"(data: unknown) {
+      const formattedData = formatData(eventSchemas["chat.message.sent"], data);
+      return {
+        ...formattedData,
+        repliesTo: formattedData.repliesTo && {
+          ...formattedData.repliesTo,
+          sender: {
+            ...formattedData.repliesTo.sender,
+            ...createUserActions(client, formattedData.repliesTo.sender.userId),
+          },
+        },
+        sender: {
+          ...formattedData.sender,
+          ...createUserActions(client, formattedData.sender.userId),
+        },
+      };
+    },
+    "channel.followed"(data: unknown) {
+      const formattedData = formatData(eventSchemas["channel.followed"], data);
+      return {
+        ...formattedData,
+        follower: {
+          ...formattedData.follower,
+          ...createUserActions(client, formattedData.follower.userId),
+        },
+      };
+    },
+    "channel.subscription.renewal"(data: unknown) {
+      const { createdAt, expiresAt, ...formattedData } = formatData(
+        eventSchemas["channel.subscription.renewal"],
+        data
+      );
+      return {
+        ...formattedData,
+        subscriber: {
+          ...formattedData.subscriber,
+          ...createUserActions(client, formattedData.subscriber.userId),
+        },
+        createdAt: new Date(createdAt),
+        expiresAt: new Date(expiresAt),
+      };
+    },
+    "channel.subscription.gifts"(data: unknown) {
+      const { createdAt, expiresAt, ...formattedData } = formatData(
+        eventSchemas["channel.subscription.gifts"],
+        data
+      );
+      return {
+        ...formattedData,
+        gifter: formattedData.gifter.isAnonymous
+          ? { isAnonymous: true as const }
+          : {
+              ...formattedData.gifter,
+              ...createUserActions(client, formattedData.gifter.userId),
+            },
+        giftees: formattedData.giftees.map((giftee) => ({
+          ...giftee,
+          ...createUserActions(client, giftee.userId),
+        })),
         createdAt: new Date(createdAt),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
-      },
-    };
-  },
-  "kicks.gifted"(data: unknown) {
-    const { createdAt, ...formattedData } = formatData(
-      eventSchemas["kicks.gifted"],
-      data
-    );
-    return { ...formattedData, createdAt: new Date(createdAt) };
-  },
-};
+      };
+    },
+    "channel.subscription.new"(data: unknown) {
+      const { createdAt, expiresAt, ...formattedData } = formatData(
+        eventSchemas["channel.subscription.new"],
+        data
+      );
+      return {
+        ...formattedData,
+        subscriber: {
+          ...formattedData.subscriber,
+          ...createUserActions(client, formattedData.subscriber.userId),
+        },
+        createdAt: new Date(createdAt),
+        expiresAt: new Date(expiresAt),
+      };
+    },
+    "channel.reward.redemption.updated"(data: unknown) {
+      const { redeemedAt, ...formattedData } = formatData(
+        eventSchemas["channel.reward.redemption.updated"],
+        data
+      );
+      return {
+        ...formattedData,
+        redeemer: {
+          ...formattedData.redeemer,
+          ...createUserActions(client, formattedData.redeemer.userId),
+        },
+        redeemedAt: new Date(redeemedAt),
+      };
+    },
+    "livestream.status.updated"(data: unknown) {
+      const { startedAt, endedAt, ...formattedData } = formatData(
+        eventSchemas["livestream.status.updated"],
+        data
+      );
+      return {
+        ...formattedData,
+        startedAt: new Date(startedAt),
+        endedAt: new Date(endedAt || 0),
+      };
+    },
+    "livestream.metadata.updated"(data: unknown) {
+      return formatData(eventSchemas["livestream.metadata.updated"], data);
+    },
+    "moderation.banned"(data: unknown) {
+      const {
+        metadata: { createdAt, expiresAt, ...metadata },
+        ...formattedData
+      } = formatData(eventSchemas["moderation.banned"], data);
+      return {
+        ...formattedData,
+        bannedUser: {
+          ...formattedData.bannedUser,
+          ...createUserActions(client, formattedData.bannedUser.userId),
+        },
+        metadata: {
+          ...metadata,
+          createdAt: new Date(createdAt),
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+        },
+      };
+    },
+    "kicks.gifted"(data: unknown) {
+      const { createdAt, ...formattedData } = formatData(
+        eventSchemas["kicks.gifted"],
+        data
+      );
+      return {
+        ...formattedData,
+        sender: {
+          ...formattedData.sender,
+          ...createUserActions(client, formattedData.sender.userId),
+        },
+        createdAt: new Date(createdAt),
+      };
+    },
+  };
+}
+
+function createUserEventDataFormatters(client: UserClient) {
+  const formatters = createEventDataFormatters(client);
+  return {
+    "chat.message.sent"(data: unknown) {
+      const formattedData = formatters["chat.message.sent"](data);
+      return {
+        ...formattedData,
+        repliesTo: formattedData.repliesTo && {
+          ...formattedData.repliesTo,
+          sender: {
+            ...formattedData.repliesTo.sender,
+            ...createUserModerationActions(
+              client,
+              formattedData.repliesTo.sender.userId,
+              formattedData.broadcaster.userId
+            ),
+          },
+        },
+        sender: {
+          ...formattedData.sender,
+          ...createUserModerationActions(
+            client,
+            formattedData.sender.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "channel.followed"(data: unknown) {
+      const formattedData = formatters["channel.followed"](data);
+      return {
+        ...formattedData,
+        follower: {
+          ...formattedData.follower,
+          ...createUserModerationActions(
+            client,
+            formattedData.follower.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "channel.subscription.renewal"(data: unknown) {
+      const formattedData = formatters["channel.subscription.renewal"](data);
+      return {
+        ...formattedData,
+        subscriber: {
+          ...formattedData.subscriber,
+          ...createUserModerationActions(
+            client,
+            formattedData.subscriber.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "channel.subscription.gifts"(data: unknown) {
+      const formattedData = formatters["channel.subscription.gifts"](data);
+      return {
+        ...formattedData,
+        gifter: formattedData.gifter.isAnonymous
+          ? { isAnonymous: true as const }
+          : {
+              ...formattedData.gifter,
+              ...createUserModerationActions(
+                client,
+                formattedData.gifter.userId,
+                formattedData.broadcaster.userId
+              ),
+            },
+      };
+    },
+    "channel.subscription.new"(data: unknown) {
+      const formattedData = formatters["channel.subscription.new"](data);
+      return {
+        ...formattedData,
+        subscriber: {
+          ...formattedData.subscriber,
+          ...createUserModerationActions(
+            client,
+            formattedData.subscriber.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "channel.reward.redemption.updated"(data: unknown) {
+      const formattedData =
+        formatters["channel.reward.redemption.updated"](data);
+      return {
+        ...formattedData,
+        reward: {
+          ...formattedData.reward,
+          async delete() {
+            await client.channelRewards.deleteChannelReward(
+              formattedData.reward.id
+            );
+          },
+          async update(options: UpdateChannelRewardOptions) {
+            await client.channelRewards.updateChannelReward(
+              formattedData.reward.id,
+              options
+            );
+          },
+        },
+        redeemer: {
+          ...formattedData.redeemer,
+          ...createUserModerationActions(
+            client,
+            formattedData.redeemer.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "livestream.status.updated"(data: unknown) {
+      return formatters["livestream.status.updated"](data);
+    },
+    "livestream.metadata.updated"(data: unknown) {
+      return formatters["livestream.metadata.updated"](data);
+    },
+    "moderation.banned"(data: unknown) {
+      const formattedData = formatters["moderation.banned"](data);
+      return {
+        ...formattedData,
+        bannedUser: {
+          ...formattedData.bannedUser,
+          ...createUserModerationActions(
+            client,
+            formattedData.bannedUser.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+    "kicks.gifted"(data: unknown) {
+      const formattedData = formatters["kicks.gifted"](data);
+      return {
+        ...formattedData,
+        sender: {
+          ...formattedData.sender,
+          ...createUserModerationActions(
+            client,
+            formattedData.sender.userId,
+            formattedData.broadcaster.userId
+          ),
+        },
+      };
+    },
+  };
+}
 
 type KickEventHandlers = {
   [E in KickEvent]: <E extends KickEvent>(
-    payload: ReturnType<(typeof eventDataFormatters)[E]>
+    payload: ReturnType<
+      ReturnType<
+        typeof createEventDataFormatters | typeof createUserEventDataFormatters
+      >[E]
+    >
   ) => unknown;
 };
 
+interface User {
+  formatters: ReturnType<
+    typeof createEventDataFormatters | typeof createUserEventDataFormatters
+  >;
+  handlers: Partial<KickEventHandlers>;
+}
+
 export class KickAPIEvents {
   private readonly app = express();
-  private readonly events = new Map<number, Partial<KickEventHandlers>>();
+  private readonly users = new Map<number, User>();
   private key = crypto.createPublicKey(`
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq/+l1WnlRrGSolDMA+A8
@@ -281,9 +540,9 @@ twIDAQAB
         req.headers["kick-event-type"]
       );
 
-      await this.events
-        .get(req.body.broadcaster.user_id)
-        ?.[eventType]?.(eventDataFormatters[eventType](req.body));
+      const user = this.users.get(req.body.broadcaster.user_id);
+
+      await user?.handlers[eventType]?.(user.formatters[eventType](req.body));
 
       res.sendStatus(200);
     });
@@ -291,11 +550,19 @@ twIDAQAB
     this.app.listen(port);
   }
 
-  async on<E extends KickEvent>(
+  async on<E extends KickEvent, C extends AppClient | UserClient>(
     event: E,
     userId: number,
-    client: AppClient | UserClient,
-    callback: (payload: ReturnType<(typeof eventDataFormatters)[E]>) => unknown
+    client: C,
+    callback: (
+      payload: ReturnType<
+        ReturnType<
+          C extends AppClient
+            ? typeof createEventDataFormatters
+            : typeof createUserEventDataFormatters
+        >[E]
+      >
+    ) => unknown
   ) {
     if (client instanceof AppClient) {
       await client.events.createEventsSubscriptions(userId, [event]);
@@ -303,9 +570,18 @@ twIDAQAB
       await client.events.createEventsSubscriptions([event]);
     }
 
-    this.events.set(userId, {
-      ...(this.events.get(userId) || {}),
-      [event]: callback,
-    });
+    const user = this.users.get(userId);
+
+    if (user) {
+      user.handlers = { ...user.handlers, [event]: callback };
+    } else {
+      this.users.set(userId, {
+        formatters:
+          client instanceof AppClient
+            ? createEventDataFormatters(client)
+            : createUserEventDataFormatters(client),
+        handlers: { [event]: callback },
+      });
+    }
   }
 }
