@@ -1,35 +1,13 @@
 import type { ObjectLike } from "camelcase-keys";
 import camelcaseKeys from "camelcase-keys";
 import z from "zod";
-import { KickAPIError } from "./errors.js";
-import decamelizeKeys from "decamelize-keys";
+import { KickAPIError, KickResponseShapeError } from "./errors.js";
 
-export function parseSchema<T>(
-  Schema: z.ZodType<T>,
-  data: unknown,
-  message = "Unexpected response shape"
-) {
-  const parsed = Schema.safeParse(data);
-  if (!parsed.success) {
-    throw new KickAPIError({
-      message,
-      details: { error: parsed.error.issues, received: data },
-    });
-  }
-  return parsed.data;
+export async function handleResponse<
+  T extends ObjectLike | readonly ObjectLike[],
+>(Schema: z.ZodType<T>, res: Response) {
+  if (!res.ok) throw new KickAPIError(res);
+  const parsed = Schema.safeParse(await res.json());
+  if (!parsed.success) throw new KickResponseShapeError(parsed.error);
+  return camelcaseKeys(parsed.data, { deep: true });
 }
-
-export function formatData<T extends ObjectLike | readonly ObjectLike[]>(
-  Schema: z.ZodType<T>,
-  data: unknown
-) {
-  return camelcaseKeys(parseSchema(Schema, data), { deep: true });
-}
-
-export function formatRequestBody<T>(Schema: z.ZodType<T>, body: unknown) {
-  const parsedBody = parseSchema(Schema, body, "Request body is invalid");
-  return parsedBody && decamelizeKeys(parsedBody);
-}
-
-export type FormattedType<T extends ObjectLike | readonly ObjectLike[]> =
-  ReturnType<typeof formatData<z.infer<T>>>;

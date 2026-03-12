@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
-import { KickAPIError, KickResponseShapeError } from "./errors.js";
+import { KickAPIError } from "./errors.js";
 import decamelizeKeys from "decamelize-keys";
-import camelcaseKeys from "camelcase-keys";
+import { handleResponse } from "./utils.js";
 
 const UserTokenSchema = z.object({
   access_token: z.string(),
@@ -107,14 +107,9 @@ export async function exchangeCodeForToken(params: ExchangeCodeForTokenParams) {
     }),
   });
 
-  if (!res.ok) throw new KickAPIError(res);
+  const { scope, ...data } = await handleResponse(UserTokenSchema, res);
 
-  const result = UserTokenSchema.safeParse(await res.json());
-  if (!result.success) throw new KickResponseShapeError(result.error);
-
-  const { scope, ...data } = result.data;
-
-  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
+  return { ...data, scopes: getScopesArr(scope) };
 }
 
 interface GetAppAccessTokenParams extends ClientId, ClientSecret {}
@@ -129,12 +124,7 @@ export async function getAppAccessToken(params: GetAppAccessTokenParams) {
     }),
   });
 
-  if (!res.ok) throw new KickAPIError(res);
-
-  const result = AppAccessTokenSchema.safeParse(await res.json());
-  if (!result.success) throw new KickResponseShapeError(result.error);
-
-  return camelcaseKeys(result.data);
+  return handleResponse(AppAccessTokenSchema, res);
 }
 
 interface RefreshTokenParams extends ClientId, ClientSecret {
@@ -151,14 +141,9 @@ export async function refreshToken(params: RefreshTokenParams) {
     }),
   });
 
-  if (!res.ok) throw new KickAPIError(res);
+  const { scope, ...data } = await handleResponse(UserTokenSchema, res);
 
-  const result = UserTokenSchema.safeParse(await res.json());
-  if (!result.success) throw new KickResponseShapeError(result.error);
-
-  const { scope, ...data } = result.data;
-
-  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
+  return { ...data, scopes: getScopesArr(scope) };
 }
 
 interface RevokeTokenParams {
@@ -188,16 +173,11 @@ export async function introspectToken({ accessToken }: IntrospectTokenParams) {
 
   if (res.status === 401) return { active: false as const };
 
-  if (!res.ok) throw new KickAPIError(res);
+  const { data } = await handleResponse(TokenIntrospectionSchema, res);
 
-  const result = TokenIntrospectionSchema.safeParse(await res.json());
-  if (!result.success) throw new KickResponseShapeError(result.error);
+  if (!data.active || data.tokenType === "app") return data;
 
-  if (!result.data.data.active || result.data.data.token_type === "app") {
-    return camelcaseKeys(result.data.data);
-  }
+  const { scope, ...userTokenData } = data;
 
-  const { scope, ...data } = result.data.data;
-
-  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
+  return { ...userTokenData, scopes: getScopesArr(scope) };
 }
