@@ -1,20 +1,33 @@
-interface KickAPIErrorOptions {
-  message?: string;
-  details?: unknown;
-}
+import type z from "zod";
 
-export class KickAPIError extends Error {
-  readonly details;
+const API_ERRORS = {
+  400: "INVALID_REQUEST",
+  401: "UNAUTHORIZED",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  429: "TOO_MANY_REQUESTS",
+  500: "INTERNAL_SERVER_ERROR",
+} as const;
 
-  constructor({ message, details }: KickAPIErrorOptions) {
-    super(message);
-    this.details = details;
+export class KickError extends Error {}
+
+export class KickAPIError extends KickError {
+  readonly type;
+
+  constructor(readonly res: Response) {
+    super();
+    this.type =
+      (
+        API_ERRORS as Record<
+          number,
+          (typeof API_ERRORS)[keyof typeof API_ERRORS]
+        >
+      )[res.status] || ("UNKNOWN" as const);
   }
 }
 
-export class KickBadRequestError extends KickAPIError {}
-export class KickUnauthorizedError extends KickAPIError {}
-export class KickForbiddenError extends KickAPIError {}
-export class KickNotFoundError extends KickAPIError {}
-export class KickTooManyRequestsError extends KickAPIError {}
-export class KickInternalServerError extends KickAPIError {}
+export class KickResponseShapeError extends KickError {
+  constructor(readonly error: z.ZodError) {
+    super();
+  }
+}

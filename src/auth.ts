@@ -1,22 +1,8 @@
-import type { ObjectLike } from "camelcase-keys";
 import { createHash, randomBytes } from "crypto";
 import z from "zod";
-import { formatData } from "./utils.js";
-import { KickAPIError } from "./errors.js";
-
-export type Scope =
-  | "user:read"
-  | "channel:read"
-  | "channel:write"
-  | "channel:rewards:read"
-  | "channel:rewards:write"
-  | "chat:write"
-  | "streamkey:read"
-  | "events:subscribe"
-  | "moderation:ban"
-  | "moderation:chat_message:manage"
-  | "kicks:read"
-  | (string & {});
+import { KickAPIError, KickResponseShapeError } from "./errors.js";
+import decamelizeKeys from "decamelize-keys";
+import camelcaseKeys from "camelcase-keys";
 
 const UserTokenSchema = z.object({
   access_token: z.string(),
@@ -44,150 +30,174 @@ const TokenIntrospectionSchema = z.object({
       z.union([
         z.object({ token_type: z.literal("app") }),
         z.object({ token_type: z.literal("user"), scope: z.string() }),
-      ])
+      ]),
     ),
   ]),
 });
 
-export class KickOAuth {
-  private readonly baseUrl = "https://id.kick.com/oauth";
+interface ClientId {
+  clientId: string;
+}
 
-  constructor(
-    private readonly clientId: string,
-    private readonly clientSecret: string,
-    private readonly redirectUri: string
-  ) {}
+interface ClientSecret {
+  clientSecret: string;
+}
 
-  private request(endpoint: string, body: Record<string, string>) {
-    return fetch(`${this.baseUrl}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(body),
-    });
+type Scope =
+  | "user:read"
+  | "channel:read"
+  | "channel:write"
+  | "channel:rewards:read"
+  | "channel:rewards:write"
+  | "chat:write"
+  | "streamkey:read"
+  | "events:subscribe"
+  | "moderation:ban"
+  | "moderation:chat_message:manage"
+  | "kicks:read"
+  | (string & {});
+
+function getScopesArr(scopes: string): Scope[] {
+  return scopes.split(" ");
+}
+
+interface GetAuthorizationUrlParams extends ClientId {
+  redirectUri: string;
+  scopes: Scope[];
+}
+
+export function getAuthorizationUrl({
+  clientId,
+  redirectUri,
+  scopes,
+}: GetAuthorizationUrlParams) {
+  const state = randomBytes(16).toString("hex");
+  const codeVerifier = randomBytes(32).toString("base64url");
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: redirectUri,
+    state,
+    scope: scopes.join(" "),
+    code_challenge: createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url"),
+    code_challenge_method: "S256",
+  });
+  return {
+    url: `https://id.kick.com/oauth/authorize?${params}`,
+    state,
+    codeVerifier,
+  };
+}
+
+interface ExchangeCodeForTokenParams extends ClientId, ClientSecret {
+  code: string;
+  redirectUri: string;
+  codeVerifier: string;
+}
+
+export async function exchangeCodeForToken(params: ExchangeCodeForTokenParams) {
+  const res = await fetch("https://id.kick.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      ...decamelizeKeys(params),
+      grant_type: "authorization_code",
+    }),
+  });
+
+  if (!res.ok) throw new KickAPIError(res);
+
+  const result = UserTokenSchema.safeParse(await res.json());
+  if (!result.success) throw new KickResponseShapeError(result.error);
+
+  const { scope, ...data } = result.data;
+
+  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
+}
+
+interface GetAppAccessTokenParams extends ClientId, ClientSecret {}
+
+export async function getAppAccessToken(params: GetAppAccessTokenParams) {
+  const res = await fetch("https://id.kick.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      ...decamelizeKeys(params),
+      grant_type: "client_credentials",
+    }),
+  });
+
+  if (!res.ok) throw new KickAPIError(res);
+
+  const result = AppAccessTokenSchema.safeParse(await res.json());
+  if (!result.success) throw new KickResponseShapeError(result.error);
+
+  return camelcaseKeys(result.data);
+}
+
+interface RefreshTokenParams extends ClientId, ClientSecret {
+  refreshToken: string;
+}
+
+export async function refreshToken(params: RefreshTokenParams) {
+  const res = await fetch("https://id.kick.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      ...decamelizeKeys(params),
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!res.ok) throw new KickAPIError(res);
+
+  const result = UserTokenSchema.safeParse(await res.json());
+  if (!result.success) throw new KickResponseShapeError(result.error);
+
+  const { scope, ...data } = result.data;
+
+  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
+}
+
+interface RevokeTokenParams {
+  token: string;
+  tokenHintType?: "access_token" | "refresh_token";
+}
+
+export async function revokeToken(params: RevokeTokenParams) {
+  const res = await fetch("https://id.kick.com/oauth/revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(decamelizeKeys(params)),
+  });
+
+  if (!res.ok) throw new KickAPIError(res);
+}
+
+interface IntrospectTokenParams {
+  accessToken: string;
+}
+
+export async function introspectToken({ accessToken }: IntrospectTokenParams) {
+  const res = await fetch("https://id.kick.com/oauth/token/introspect", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (res.status === 401) return { active: false as const };
+
+  if (!res.ok) throw new KickAPIError(res);
+
+  const result = TokenIntrospectionSchema.safeParse(await res.json());
+  if (!result.success) throw new KickResponseShapeError(result.error);
+
+  if (!result.data.data.active || result.data.data.token_type === "app") {
+    return camelcaseKeys(result.data.data);
   }
 
-  private async getTokenData<T extends ObjectLike | readonly ObjectLike[]>(
-    body: Record<string, string>,
-    errorMessage: string,
-    ResponseSchema: z.ZodType<T>
-  ) {
-    const res = await this.request("/token", {
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
-      ...body,
-    });
+  const { scope, ...data } = result.data.data;
 
-    if (!res.ok) {
-      throw new KickAPIError({ message: errorMessage });
-    }
-
-    return formatData(ResponseSchema, await res.json());
-  }
-
-  getAuthorizationUrl(scopes: Scope[]) {
-    const state = randomBytes(16).toString("hex");
-    const codeVerifier = randomBytes(32).toString("base64url");
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      response_type: "code",
-      state,
-      scope: scopes.join(" "),
-      code_challenge: createHash("sha256")
-        .update(codeVerifier)
-        .digest("base64url"),
-      code_challenge_method: "S256",
-    });
-    if (this.redirectUri.includes("127.0.0.1")) {
-      params.append("redirect", "127.0.0.1");
-    }
-    params.append("redirect_uri", this.redirectUri);
-    return {
-      url: `${this.baseUrl}/authorize?${params}`,
-      state,
-      codeVerifier,
-    };
-  }
-
-  async exchangeCodeForToken(code: string, codeVerifier: string) {
-    const { expiresIn, scope, ...token } = await this.getTokenData(
-      {
-        code,
-        redirect_uri: this.redirectUri,
-        grant_type: "authorization_code",
-        code_verifier: codeVerifier,
-      },
-      "An error occured while exchanging tokens",
-      UserTokenSchema
-    );
-    return {
-      ...token,
-      expiresAt: new Date(Date.now() + expiresIn * 1000),
-      scopes: scope.split(" ") as Scope[],
-    };
-  }
-
-  async getAppAccessToken() {
-    const { expiresIn, ...token } = await this.getTokenData(
-      { grant_type: "client_credentials" },
-      "An error occured while getting app access token",
-      AppAccessTokenSchema
-    );
-    return { ...token, expiresAt: new Date(Date.now() + expiresIn * 1000) };
-  }
-
-  async refreshToken(refreshToken: string) {
-    const { expiresIn, scope, ...token } = await this.getTokenData(
-      { refresh_token: refreshToken, grant_type: "refresh_token" },
-      "An error occured while refreshing tokens",
-      UserTokenSchema
-    );
-    return {
-      ...token,
-      expiresAt: new Date(Date.now() + expiresIn * 1000),
-      scopes: scope.split(" ") as Scope[],
-    };
-  }
-
-  async revokeToken(
-    token: string,
-    tokenHintType?: "access_token" | "refresh_token"
-  ) {
-    const requestBody: Record<string, string> = { token };
-    if (tokenHintType) {
-      requestBody.token_hint_type = tokenHintType;
-    }
-    await this.request("/revoke", requestBody);
-  }
-
-  async introspectToken(token: string) {
-    const res = await fetch("https://api.kick.com/public/v1/token/introspect", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (res.status === 401) {
-      return { active: false as const };
-    }
-
-    if (!res.ok) {
-      throw new KickAPIError({
-        message: "An error occured while introspecting token",
-        details: await res.json(),
-      });
-    }
-
-    const { data } = formatData(TokenIntrospectionSchema, await res.json());
-    if (!data.active) {
-      return data;
-    }
-
-    const { exp, ...tokenData } = data;
-    const tokenWithDate = { ...tokenData, expiresAt: new Date(exp * 1000) };
-    if (tokenWithDate.tokenType === "app") {
-      return tokenWithDate;
-    }
-
-    const { scope, ...userTokenData } = tokenWithDate;
-    return { ...userTokenData, scopes: scope.split(" ") as Scope[] };
-  }
+  return camelcaseKeys({ ...data, scopes: getScopesArr(scope) });
 }
