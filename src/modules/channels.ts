@@ -1,114 +1,87 @@
 import z from "zod";
-import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
-import { KickAPIError } from "../errors.js";
+import { KickAPIClient } from "../api-client.js";
+import { KickError } from "../errors.js";
+import decamelizeKeys from "decamelize-keys";
 
-const ChannelsSchema = z.array(
-  z.object({
-    banner_picture: z.string(),
-    broadcaster_user_id: z.number(),
-    category: z.object({
-      id: z.number(),
-      name: z.string(),
-      thumbnail: z.string(),
-    }),
-    channel_description: z.string(),
-    slug: z.string(),
-    stream: z.object({
-      custom_tags: z.array(z.string()).optional(),
-      is_live: z.boolean(),
-      is_mature: z.boolean(),
-      key: z.string(),
-      language: z.string(),
-      start_time: z.string(),
-      thumbnail: z.string(),
-      url: z.string(),
-      viewer_count: z.number(),
-    }),
-    stream_title: z.string(),
-  })
-);
+interface GetChannelsByBroadcasterIdsParams {
+  ids: number[];
+}
 
-const LivestreamMetadataOptionsSchema = z.object({
-  categoryId: z.int().optional(),
-  customTags: z.array(z.string()).optional(),
-  streamTitle: z.string().optional(),
+interface GetChannelsBySlugsParams {
+  slugs: string[];
+}
+
+interface UpdateLivestreamMetadataParams {
+  categoryId?: string;
+  customTags?: string[];
+  streamTitle?: string;
+}
+
+const ChannelsSchema = z.object({
+  data: z.array(
+    z.object({
+      active_subscribers_count: z.number(),
+      banner_picture: z.string(),
+      broadcaster_user_id: z.number(),
+      canceled_subscribers_count: z.number(),
+      category: z.object({
+        id: z.number(),
+        name: z.string(),
+        thumbnail: z.string(),
+      }),
+      channel_description: z.string(),
+      slug: z.string(),
+      stream: z.object({
+        custom_tags: z.array(z.string()).optional(),
+        is_live: z.boolean(),
+        is_mature: z.boolean(),
+        key: z.string(),
+        language: z.string(),
+        start_time: z.string(),
+        thumbnail: z.string(),
+        url: z.string(),
+        viewer_count: z.number(),
+      }),
+      stream_title: z.string(),
+    }),
+  ),
 });
 
 export class ChannelsAPI extends KickAPIClient {
-  async getChannelsByBroadcasterId(...ids: number[]) {
-    if (ids.length > 50) {
-      throw new KickAPIError({
-        message: "Can not provide more than 50 user IDs",
-      });
-    }
-    const params = new URLSearchParams();
-    for (const id of ids) {
-      params.append("broadcaster_user_id", id.toString());
-    }
-    return (await this.get(`/channels?${params}`, ChannelsSchema)).map(
-      ({ stream: { startTime, ...stream }, ...channel }) => ({
-        ...channel,
-        stream: { ...stream, startTime: new Date(startTime) },
-      })
-    );
+  protected async getChannelsData(params?: URLSearchParams) {
+    return (
+      await this.get(`/v1/channels?${params || ""}`, ChannelsSchema)
+    ).data.map(({ stream: { startTime, ...stream }, ...channel }) => ({
+      ...channel,
+      stream: { ...stream, startTime: new Date(startTime) },
+    }));
   }
 
-  async getChannelsBySlug(...slugs: string[]) {
-    if (slugs.length > 50) {
-      throw new KickAPIError({ message: "Can not provide more than 50 slugs" });
-    }
-    if (slugs.some((slug) => slug.length > 25)) {
-      throw new KickAPIError({
-        message: "A slug can not have more than 25 characters",
-      });
-    }
+  getChannelsByBroadcasterIds({ ids }: GetChannelsByBroadcasterIdsParams) {
     const params = new URLSearchParams();
-    for (const slug of slugs) {
-      params.append("slug", slug);
-    }
-    return (await this.get(`/channels?${params}`, ChannelsSchema)).map(
-      ({ stream: { startTime, ...stream }, ...channel }) => ({
-        ...channel,
-        stream: { ...stream, startTime: new Date(startTime) },
-      })
-    );
+    for (const id of ids) params.append("broadcaster_user_id", id.toString());
+    return this.getChannelsData(params);
+  }
+
+  getChannelsBySlug({ slugs }: GetChannelsBySlugsParams) {
+    const params = new URLSearchParams();
+    for (const slug of slugs) params.append("slug", slug);
+    return this.getChannelsData(params);
   }
 }
 
-export class UserChannelsAPI extends UserKickAPIClient {
-  private readonly api = new ChannelsAPI(this.token, this.onTokensRefreshed);
-
+export class UserChannelsAPI extends ChannelsAPI {
   async getAuthenticatedUserChannel() {
-    this.requireScopes("channel:read");
-    const channel = (await this.get("/channels", ChannelsSchema))[0];
+    const channel = (await this.getChannelsData())[0];
     if (!channel) {
-      throw new KickAPIError({
-        message: "Expected the API to return a channel, but got no channel",
-      });
+      throw new KickError(
+        "Expected the API to return a channel, but got no channel",
+      );
     }
-    return {
-      ...channel,
-      stream: {
-        ...channel.stream,
-        startTime: new Date(channel.stream.startTime),
-      },
-    };
+    return channel;
   }
 
-  async updateLivestreamMetadata(
-    options: z.infer<typeof LivestreamMetadataOptionsSchema>
-  ) {
-    this.requireScopes("channel:write");
-    await this.patch("/channels", options, LivestreamMetadataOptionsSchema);
-  }
-
-  getChannelsByBroadcasterId(...ids: number[]) {
-    this.requireScopes("channel:read");
-    return this.api.getChannelsByBroadcasterId(...ids);
-  }
-
-  getChannelsBySlug(...slugs: string[]) {
-    this.requireScopes("channel:read");
-    return this.api.getChannelsBySlug(...slugs);
+  async updateLivestreamMetadata(params: UpdateLivestreamMetadataParams) {
+    await this.patch("/v1/channels", decamelizeKeys(params));
   }
 }
