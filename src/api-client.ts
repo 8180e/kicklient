@@ -1,148 +1,107 @@
 import z from "zod";
-import { formatData, formatRequestBody } from "./utils.js";
-import {
-  KickAPIError,
-  KickBadRequestError,
-  KickForbiddenError,
-  KickInternalServerError,
-  KickNotFoundError,
-  KickTooManyRequestsError,
-  KickUnauthorizedError,
-} from "./errors.js";
-import type { KickOAuth, Scope } from "./auth.js";
-import { UserToken, type AppToken } from "./token.js";
+import { KickAPIError, KickResponseShapeError } from "./errors.js";
+import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
+
+interface Token {
+  accessToken: string;
+  expiresAt: number;
+  refreshTokens(): Promise<void>;
+}
+
+interface ClientOptions {
+  retries?: number;
+  retryBaseDelay?: number;
+}
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
-  RequestSchema?: z.ZodType | undefined;
 }
 
-export type OnTokensRefreshed = (
-  tokens: Awaited<
-    ReturnType<KickOAuth["getAppAccessToken"] | KickOAuth["refreshToken"]>
-  >
-) => unknown;
-
-function extractData<T>(data: unknown, ResponseSchema: z.ZodType<T>) {
-  return formatData(z.object({ data: ResponseSchema }), data).data;
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-interface RequestReturn {
-  getData<T>(
-    ResponseSchema: z.ZodType<T>
-  ): Promise<ReturnType<typeof extractData<T>>>;
+function exponentialBackoff(base: number, attempt: number) {
+  const jitter = Math.random() * 200;
+  return base * 2 ** attempt + jitter;
 }
 
 export abstract class KickAPIClient {
+  private readonly options;
+
   constructor(
-    protected readonly token: AppToken | UserToken,
-    protected readonly onTokensRefreshed?: OnTokensRefreshed
-  ) {}
+    private readonly token: Token,
+    options: ClientOptions = {},
+  ) {
+    this.options = { retries: 5, retryBaseDelay: 500, ...options };
+  }
 
   private async request(
     endpoint: string,
-    { method = "GET", body, RequestSchema }: RequestOptions = {},
-    retry = false
-  ): Promise<RequestReturn> {
-    const requestBody = RequestSchema && formatRequestBody(RequestSchema, body);
-
-    const res = await fetch(`https://api.kick.com/public/v1${endpoint}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token.accessToken}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      const errorOptions = {
-        details: { data, endpoint, requestBody },
-      };
-      switch (res.status) {
-        case 400:
-          throw new KickBadRequestError(errorOptions);
-        case 401:
-          if (!retry) {
-            await this.onTokensRefreshed?.(await this.token.refreshTokens());
-            return this.request(
-              endpoint,
-              { method, body, RequestSchema },
-              true
-            );
-          }
-          throw new KickUnauthorizedError(errorOptions);
-        case 403:
-          throw new KickForbiddenError(errorOptions);
-        case 404:
-          throw new KickNotFoundError(errorOptions);
-        case 429:
-          if (!retry) {
-            this.request(endpoint, { method, body, RequestSchema }, true);
-          }
-          throw new KickTooManyRequestsError(errorOptions);
-        case 500:
-          throw new KickInternalServerError(errorOptions);
-        default:
-          throw new KickAPIError({
-            message: "An unexpected API error occurred",
-            details: { status: res.status, data },
-          });
+    { method = "GET", body }: RequestOptions = {},
+  ) {
+    const makeRequest = async () => {
+      if (Date.now() >= this.token.expiresAt - 30_000) {
+        await this.token.refreshTokens();
       }
+
+      const res = await fetch(`https://api.kick.com/public${endpoint}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token.accessToken}`,
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+
+      if (res.status === 401) {
+        await this.token.refreshTokens();
+        return makeRequest();
+      }
+
+      return res;
+    };
+
+    let res = await makeRequest();
+
+    let attempt = 0;
+
+    while (res.status === 429 && attempt < this.options.retries) {
+      await sleep(exponentialBackoff(this.options.retryBaseDelay, attempt));
+      res = await makeRequest();
+      attempt++;
     }
 
-    return {
-      async getData<T>(ResponseSchema: z.ZodType<T>) {
-        if (res.status === 204) {
-          throw new KickAPIError({
-            message: "Response body does not include content",
-          });
-        }
+    if (!res.ok) throw new KickAPIError(res);
 
-        return extractData(await res.json(), ResponseSchema);
+    return {
+      async getData<T extends ObjectLike | readonly ObjectLike[]>(
+        Schema: z.ZodType<T>,
+      ) {
+        const parsed = Schema.safeParse(await res.json());
+        if (!parsed.success) throw new KickResponseShapeError(parsed.error);
+        return camelcaseKeys(parsed.data, { deep: true });
       },
     };
   }
 
-  protected async get<T>(endpoint: string, ResponseSchema: z.ZodType<T>) {
+  protected async get<T extends ObjectLike | readonly ObjectLike[]>(
+    endpoint: string,
+    ResponseSchema: z.ZodType<T>,
+  ) {
     return (await this.request(endpoint)).getData(ResponseSchema);
   }
 
-  protected post(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
-    return this.request(endpoint, { method: "POST", body, RequestSchema });
+  protected post(endpoint: string, body: unknown) {
+    return this.request(endpoint, { method: "POST", body });
   }
 
-  protected patch(endpoint: string, body: unknown, RequestSchema: z.ZodType) {
-    return this.request(endpoint, { method: "PATCH", body, RequestSchema });
+  protected patch(endpoint: string, body: unknown) {
+    return this.request(endpoint, { method: "PATCH", body });
   }
 
-  protected async delete(
-    endpoint: string,
-    body?: unknown,
-    RequestSchema?: z.ZodType
-  ) {
-    await this.request(endpoint, { method: "DELETE", body, RequestSchema });
-  }
-}
-
-export abstract class UserKickAPIClient extends KickAPIClient {
-  constructor(
-    protected readonly token: UserToken,
-    onTokensRefreshed?: OnTokensRefreshed
-  ) {
-    super(token, onTokensRefreshed);
-  }
-
-  protected requireScopes(...scopes: Scope[]) {
-    const { token } = this;
-    if (!scopes.every((scope) => token.scopes.includes(scope))) {
-      throw new KickAPIError({
-        message:
-          "Token does not have the required scopes to call this endpoint",
-        details: { requiredScopes: scopes, tokenScopes: token.scopes },
-      });
-    }
+  protected async delete(endpoint: string, body?: unknown) {
+    await this.request(endpoint, { method: "DELETE", body });
   }
 }
