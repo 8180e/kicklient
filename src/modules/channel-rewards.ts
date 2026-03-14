@@ -1,6 +1,5 @@
 import z from "zod";
 import { KickAPIClient } from "../api-client.js";
-import type { CamelCaseKeys } from "camelcase-keys";
 import decamelizeKeys from "decamelize-keys";
 
 interface CreateChannelRewardParams {
@@ -80,26 +79,26 @@ const AcceptChannelRewardRedemptionsResponse = z.array(
 export class ChannelRewardsAPI extends KickAPIClient {
   private readonly endpoint = "/v1/channels/rewards";
 
-  private createRewardObject(
-    data: CamelCaseKeys<z.infer<typeof ChannelRewardSchema>>,
-  ) {
+  private createRewardMethods(rewardId: string) {
     return {
-      ...data,
-      delete: () => this.deleteChannelReward(data.id),
+      delete: () => this.deleteChannelReward(rewardId),
       update: (options: UpdateChannelRewardParams) =>
-        this.updateChannelReward(data.id, options),
+        this.updateChannelReward(rewardId, options),
     };
   }
 
   async getChannelRewards() {
     const { data } = await this.get(this.endpoint, ChannelRewardsSchema);
-    return data.map((data) => this.createRewardObject(data));
+    return data.map((data) => ({
+      ...data,
+      ...this.createRewardMethods(data.id),
+    }));
   }
 
   async createChannelReward(params: CreateChannelRewardParams) {
     const res = await this.post(this.endpoint, decamelizeKeys(params));
     const { data } = await res.getData(ChannelRewardSchema);
-    return this.createRewardObject(data);
+    return { ...data, ...this.createRewardMethods(data.id) };
   }
 
   deleteChannelReward(id: string) {
@@ -110,15 +109,22 @@ export class ChannelRewardsAPI extends KickAPIClient {
     const reqBody = decamelizeKeys(params);
     const res = await this.patch(`${this.endpoint}/${id}`, reqBody);
     const { data } = await res.getData(ChannelRewardSchema);
-    return this.createRewardObject(data);
+    return { ...data, ...this.createRewardMethods(data.id) };
   }
 
-  private getChannelRewardRedemptionsData(params: URLSearchParams) {
-    return this.getPaginatedData(
+  private async *getChannelRewardRedemptionsData(params: URLSearchParams) {
+    const gen = this.getPaginatedData(
       `${this.endpoint}/redemptions`,
       params,
       ChannelRewardRedemptionsSchema,
     );
+
+    for await (const redemptions of gen) {
+      yield redemptions.map(({ reward, ...redemption }) => ({
+        ...redemption,
+        reward: { ...reward, ...this.createRewardMethods(reward.id) },
+      }));
+    }
   }
 
   getChannelRewardRedemptionsByIds({
