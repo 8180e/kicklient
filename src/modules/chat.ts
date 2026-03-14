@@ -1,32 +1,25 @@
 import z from "zod";
-import { UserKickAPIClient } from "../api-client.js";
+import { KickAPIClient } from "../api-client.js";
+import decamelizeKeys from "decamelize-keys";
 
-const PostMessageOptionsSchema = z.intersection(
-  z.object({
-    content: z.string().max(500),
-    replyToMessageId: z.uuid().optional(),
-  }),
-  z.union([
-    z.object({ type: z.literal("user"), broadcasterUserId: z.int() }),
-    z.object({ type: z.literal("bot") }),
-  ])
-);
+type PostChatMessageParams = (
+  | { type: "user"; broadcasterUserId: number }
+  | { type: "bot" }
+) & { content: string; replyToMessageId: string };
 
 const PostMessageResponseSchema = z.object({
   is_sent: z.boolean(),
   message_id: z.string(),
 });
 
-export class ChatAPI extends UserKickAPIClient {
-  async postChatMessage(options: z.infer<typeof PostMessageOptionsSchema>) {
-    this.requireScopes("chat:write");
-    return (
-      await this.post("/chat", options, PostMessageOptionsSchema)
-    ).getData(PostMessageResponseSchema);
+export class ChatAPI extends KickAPIClient {
+  async postChatMessage(params: PostChatMessageParams) {
+    const res = await this.post("/v1/chat", decamelizeKeys(params));
+    const { data } = await res.getData(PostMessageResponseSchema);
+    return { ...data, delete: () => this.deleteChatMessage(data.messageId) };
   }
 
-  async deleteChatMessage(messageId: string) {
-    this.requireScopes("moderation:chat_message:manage");
-    await this.delete(`/chat/${messageId}`);
+  deleteChatMessage(messageId: string) {
+    return this.delete(`/v1/chat/${messageId}`);
   }
 }
