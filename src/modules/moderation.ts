@@ -1,34 +1,31 @@
-import z from "zod";
-import { UserKickAPIClient } from "../api-client.js";
+import { KickAPIClient } from "../api-client.js";
+import decamelizeKeys from "decamelize-keys";
 
-const BanUserOptionsSchema = z.object({
-  broadcasterUserId: z.int(),
-  reason: z.string().max(100).optional(),
-  userId: z.int(),
-});
+interface ModerationParams {
+  broadcasterUserId: number;
+  userId: string;
+}
 
-const TimeoutUserOptionsSchema = BanUserOptionsSchema.extend({
-  duration: z.int().min(1).max(10080),
-});
+interface BanUserParams extends ModerationParams {
+  reason?: string;
+}
 
-const RemoveBanOptionsSchema = z.object({
-  broadcasterUserId: z.int(),
-  userId: z.int(),
-});
+interface TimeoutUserParams extends BanUserParams {
+  duration: number;
+}
 
-export class ModerationAPI extends UserKickAPIClient {
-  async banUser(options: z.infer<typeof BanUserOptionsSchema>) {
-    this.requireScopes("moderation:ban");
-    await this.post("/moderation/bans", options, BanUserOptionsSchema);
+type RemoveBanParams = ModerationParams;
+
+export class ModerationAPI extends KickAPIClient {
+  async banUser(options: BanUserParams) {
+    await this.post("/v1/moderation/bans", decamelizeKeys(options));
   }
 
-  async timeoutUser(options: z.infer<typeof TimeoutUserOptionsSchema>) {
-    this.requireScopes("moderation:ban");
-    await this.post("/moderation/bans", options, TimeoutUserOptionsSchema);
+  async timeoutUser(options: TimeoutUserParams) {
+    await this.post("/v1/moderation/bans", decamelizeKeys(options));
   }
 
-  async removeBan(options: z.infer<typeof RemoveBanOptionsSchema>) {
-    this.requireScopes("moderation:ban");
-    await this.delete("/moderation/bans", options, RemoveBanOptionsSchema);
+  removeBan(options: RemoveBanParams) {
+    return this.delete("/v1/moderation/bans", decamelizeKeys(options));
   }
 }
