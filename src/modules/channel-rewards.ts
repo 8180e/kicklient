@@ -50,17 +50,19 @@ const ChannelRewardRedemptionStatus = z.enum([
   "rejected",
 ]);
 
+const RedemptionsSchema = z.array(
+  z.object({
+    id: z.string(),
+    redeemed_at: z.string(),
+    redeemer: z.object({ user_id: z.number() }),
+    status: ChannelRewardRedemptionStatus,
+    user_input: z.string(),
+  }),
+);
+
 const ChannelRewardRedemptionsSchema = z.array(
   z.object({
-    redemptions: z.array(
-      z.object({
-        id: z.string(),
-        redeemed_at: z.string(),
-        redeemer: z.object({ user_id: z.number() }),
-        status: ChannelRewardRedemptionStatus,
-        user_input: z.string(),
-      }),
-    ),
+    redemptions: RedemptionsSchema,
     reward: z.object({
       can_manage: z.boolean(),
       cost: z.number(),
@@ -119,10 +121,31 @@ export class ChannelRewardsAPI extends KickAPIClient {
       ChannelRewardRedemptionsSchema,
     );
 
-    for await (const redemptions of gen) {
-      yield redemptions.map(({ reward, ...redemption }) => ({
-        ...redemption,
+    for await (const page of gen) {
+      let ids: string[] = [];
+
+      yield page.map(({ reward, redemptions, ...page }) => ({
+        ...page,
+        redemptions: redemptions.map((redemption) => ({
+          ...redemption,
+          select() {
+            ids.push(redemption.id);
+          },
+          deselect() {
+            ids = ids.filter((id) => id !== redemption.id);
+          },
+        })),
         reward: { ...reward, ...this.createRewardMethods(reward.id) },
+        acceptAll: () =>
+          this.acceptChannelRewardRedemptions({
+            ids: redemptions.map(({ id }) => id),
+          }),
+        rejectAll: () =>
+          this.rejectChannelRewardRedemptions({
+            ids: redemptions.map(({ id }) => id),
+          }),
+        acceptSelected: () => this.acceptChannelRewardRedemptions({ ids }),
+        rejectSelected: () => this.rejectChannelRewardRedemptions({ ids }),
       }));
     }
   }
