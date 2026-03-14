@@ -15,6 +15,12 @@ const UsersSchema = z.array(
   }),
 );
 
+export async function getUser(users: UsersAPI, id: number) {
+  const [user] = await users.getUsersByIds({ ids: [id] });
+  if (!user) throw new KickError("User not found");
+  return user;
+}
+
 export class UsersAPI extends KickAPIClient {
   protected async getUsersData(params?: URLSearchParams) {
     return (await this.get(`/v1/users?${params || ""}`, UsersSchema)).data;

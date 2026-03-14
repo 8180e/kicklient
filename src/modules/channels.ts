@@ -1,7 +1,12 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import {
+  KickAPIClient,
+  type ClientOptions,
+  type Token,
+} from "../api-client.js";
 import { KickError } from "../errors.js";
 import decamelizeKeys from "decamelize-keys";
+import { getUser, type UsersAPI } from "./users.js";
 
 interface GetChannelsByBroadcasterIdsParams {
   ids: number[];
@@ -46,12 +51,21 @@ const ChannelsSchema = z.array(
 );
 
 export class ChannelsAPI extends KickAPIClient {
+  constructor(
+    private readonly users: UsersAPI,
+    token: Token,
+    options?: ClientOptions,
+  ) {
+    super(token, options);
+  }
+
   protected async getChannelsData(params?: URLSearchParams) {
     return (
       await this.get(`/v1/channels?${params || ""}`, ChannelsSchema)
     ).data.map(({ stream: { startTime, ...stream }, ...channel }) => ({
       ...channel,
       stream: { ...stream, startTime: new Date(startTime) },
+      getBroadcasterData: () => getUser(this.users, channel.broadcasterUserId),
     }));
   }
 
