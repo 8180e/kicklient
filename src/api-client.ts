@@ -2,13 +2,13 @@ import z from "zod";
 import { KickAPIError, KickResponseShapeError } from "./errors.js";
 import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
 
-interface Token {
+export interface Token {
   accessToken: string;
   expiresAt: number;
   refreshTokens(): Promise<void>;
 }
 
-interface ClientOptions {
+export interface ClientOptions {
   retries?: number;
   retryBaseDelay?: number;
 }
