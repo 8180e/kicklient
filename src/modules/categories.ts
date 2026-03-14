@@ -34,9 +34,8 @@ export class CategoriesAPI extends KickAPIClient {
     yield response.data;
 
     while (response.pagination.nextCursor) {
-      response = await this.makeCategoriesRequest(
-        new URLSearchParams({ cursor: response.pagination.nextCursor }),
-      );
+      params.set("cursor", response.pagination.nextCursor);
+      response = await this.makeCategoriesRequest(params);
 
       yield response.data;
     }
