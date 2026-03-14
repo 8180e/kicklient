@@ -41,12 +41,8 @@ export abstract class KickAPIClient {
     endpoint: string,
     { method = "GET", body }: RequestOptions = {},
   ) {
-    const makeRequest = async () => {
-      if (Date.now() >= this.token.expiresAt - 30_000) {
-        await this.token.refreshTokens();
-      }
-
-      const res = await fetch(`https://api.kick.com/public${endpoint}`, {
+    const makeRequest = () =>
+      fetch(`https://api.kick.com/public${endpoint}`, {
         method,
         headers: {
           Authorization: `Bearer ${this.token.accessToken}`,
@@ -55,21 +51,26 @@ export abstract class KickAPIClient {
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
 
-      if (res.status === 401) {
+    const makeRequestWithRefresh = async () => {
+      if (Date.now() >= this.token.expiresAt - 30_000) {
         await this.token.refreshTokens();
-        return makeRequest();
       }
 
-      return res;
+      const res = await makeRequest();
+
+      if (res.status !== 401) return res;
+
+      await this.token.refreshTokens();
+      return makeRequest();
     };
 
-    let res = await makeRequest();
+    let res = await makeRequestWithRefresh();
 
     let attempt = 0;
 
     while (res.status === 429 && attempt < this.options.retries) {
       await sleep(exponentialBackoff(this.options.retryBaseDelay, attempt));
-      res = await makeRequest();
+      res = await makeRequestWithRefresh();
       attempt++;
     }
 
