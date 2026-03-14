@@ -1,6 +1,19 @@
 import z from "zod";
-import { UserKickAPIClient } from "../api-client.js";
-import type { FormattedType } from "../utils.js";
+import { KickAPIClient } from "../api-client.js";
+import type { CamelCaseKeys } from "camelcase-keys";
+import decamelizeKeys from "decamelize-keys";
+
+interface CreateChannelRewardParams {
+  backgroundColor?: string;
+  cost: number;
+  description?: string;
+  isEnabled?: boolean;
+  isUserInputRequired?: boolean;
+  shouldRedemptionsSkipRequestQueue?: boolean;
+  title: string;
+}
+
+type UpdateChannelRewardParams = Partial<CreateChannelRewardParams>;
 
 const ChannelRewardSchema = z.object({
   background_color: z.string(),
@@ -14,81 +27,39 @@ const ChannelRewardSchema = z.object({
   title: z.string(),
 });
 
-const ChannelRewardsSchema = z.array(ChannelRewardSchema);
+const ChannelRewardsSchema = z.object({ data: z.array(ChannelRewardSchema) });
 
-const ChannelRewardOptionsSchema = z.object({
-  backgroundColor: z
-    .string()
-    .regex(/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/, {
-      error: "Invalid hex color format",
-    })
-    .optional(),
-  cost: z.int().min(1),
-  description: z.string().max(200).optional(),
-  isEnabled: z.boolean().optional(),
-  isUserInputRequired: z.boolean().optional(),
-  shouldRedemptionsSkipRequestQueue: z.boolean().optional(),
-  title: z.string().max(50),
-});
+export class ChannelRewardsAPI extends KickAPIClient {
+  private readonly endpoint = "/v1/channels/rewards";
 
-const ChannelRewardOptionsUpdateSchema = ChannelRewardOptionsSchema.partial();
-
-export type UpdateChannelRewardOptions = z.infer<
-  typeof ChannelRewardOptionsUpdateSchema
->;
-
-export class ChannelRewardsAPI extends UserKickAPIClient {
-  private createRewardObject(data: FormattedType<typeof ChannelRewardSchema>) {
-    const client = this;
+  private createRewardObject(
+    data: CamelCaseKeys<z.infer<typeof ChannelRewardSchema>>,
+  ) {
     return {
       ...data,
-      async delete() {
-        await client.deleteChannelReward(data.id);
-      },
-      async update(options: UpdateChannelRewardOptions) {
-        return await client.updateChannelReward(data.id, options);
-      },
+      delete: () => this.deleteChannelReward(data.id),
+      update: (options: UpdateChannelRewardParams) =>
+        this.updateChannelReward(data.id, options),
     };
   }
 
   async getChannelRewards() {
-    this.requireScopes("channel:rewards:write");
-    const rewards = (
-      await this.get("/channels/rewards", ChannelRewardsSchema)
-    ).map((data) => this.createRewardObject(data));
-    return rewards;
+    const { data } = await this.get(this.endpoint, ChannelRewardsSchema);
+    return data.map((data) => this.createRewardObject(data));
   }
 
-  async createChannelReward(
-    options: z.infer<typeof ChannelRewardOptionsSchema>
-  ) {
-    this.requireScopes("channel:rewards:write");
-    return this.createRewardObject(
-      await (
-        await this.post(
-          "/channels/rewards",
-          options,
-          ChannelRewardOptionsSchema
-        )
-      ).getData(ChannelRewardSchema)
-    );
+  async createChannelReward(params: CreateChannelRewardParams) {
+    const res = await this.post(this.endpoint, decamelizeKeys(params));
+    return this.createRewardObject(await res.getData(ChannelRewardSchema));
   }
 
-  async deleteChannelReward(id: string) {
-    this.requireScopes("channel:rewards:write");
-    await this.delete(`/channels/rewards/${id}`);
+  deleteChannelReward(id: string) {
+    return this.delete(`${this.endpoint}/${id}`);
   }
 
-  async updateChannelReward(id: string, options: UpdateChannelRewardOptions) {
-    this.requireScopes("channel:rewards:write");
-    return this.createRewardObject(
-      await (
-        await this.patch(
-          `/channels/rewards/${id}`,
-          options,
-          ChannelRewardOptionsUpdateSchema
-        )
-      ).getData(ChannelRewardSchema)
-    );
+  async updateChannelReward(id: string, params: UpdateChannelRewardParams) {
+    const reqBody = decamelizeKeys(params);
+    const res = await this.patch(`${this.endpoint}/${id}`, reqBody);
+    return this.createRewardObject(await res.getData(ChannelRewardSchema));
   }
 }
