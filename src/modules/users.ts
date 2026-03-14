@@ -6,16 +6,14 @@ interface GetUsersByIdsParams {
   ids: number[];
 }
 
-const UsersSchema = z.object({
-  data: z.array(
-    z.object({
-      email: z.string(),
-      name: z.string(),
-      profile_picture: z.string(),
-      user_id: z.number(),
-    }),
-  ),
-});
+const UsersSchema = z.array(
+  z.object({
+    email: z.string(),
+    name: z.string(),
+    profile_picture: z.string(),
+    user_id: z.number(),
+  }),
+);
 
 export class UsersAPI extends KickAPIClient {
   protected async getUsersData(params?: URLSearchParams) {

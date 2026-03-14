@@ -18,6 +18,10 @@ interface RequestOptions {
   body?: unknown;
 }
 
+const PaginationSchema = z.object({
+  pagination: z.object({ next_cursor: z.string() }),
+});
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -80,9 +84,17 @@ export abstract class KickAPIClient {
       async getData<T extends ObjectLike | readonly ObjectLike[]>(
         Schema: z.ZodType<T>,
       ) {
-        const parsed = Schema.safeParse(await res.json());
+        const body = await res.json();
+        const parsed = z.object({ data: Schema }).safeParse(body);
         if (!parsed.success) throw new KickResponseShapeError(parsed.error);
-        return camelcaseKeys(parsed.data, { deep: true });
+        return {
+          data: camelcaseKeys(parsed.data.data, { deep: true }),
+          getNextCursor() {
+            const parsed = PaginationSchema.safeParse(body);
+            if (!parsed.success) throw new KickResponseShapeError(parsed.error);
+            return parsed.data.pagination.next_cursor;
+          },
+        };
       },
     };
   }
@@ -106,25 +118,22 @@ export abstract class KickAPIClient {
     await this.request(endpoint, { method: "DELETE", body });
   }
 
-  protected async *getPaginatedData<T>(
-    endpoint: string,
-    params: URLSearchParams,
-    ResponseSchema: z.ZodType<T>,
-  ) {
-    const Schema = z.object({
-      data: ResponseSchema,
-      pagination: z.object({ next_cursor: z.string() }),
-    });
+  protected async *getPaginatedData<
+    T extends ObjectLike | readonly ObjectLike[],
+  >(endpoint: string, params: URLSearchParams, ResponseSchema: z.ZodType<T>) {
+    const res = await this.get(`${endpoint}?${params}`, ResponseSchema);
 
-    let response = await this.get(`${endpoint}?${params}`, Schema);
+    yield res.data;
 
-    yield response.data;
+    let cursor = res.getNextCursor();
 
-    while (response.pagination.nextCursor) {
-      params.set("cursor", response.pagination.nextCursor);
-      response = await this.get(`${endpoint}?${params}`, Schema);
+    while (cursor) {
+      params.set("cursor", cursor);
+      const res = await this.get(`${endpoint}?${params}`, ResponseSchema);
 
-      yield response.data;
+      yield res.data;
+
+      cursor = res.getNextCursor();
     }
   }
 }
