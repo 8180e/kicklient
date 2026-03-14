@@ -1,6 +1,11 @@
 import z from "zod";
-import { KickAPIClient } from "../api-client.js";
+import {
+  KickAPIClient,
+  type ClientOptions,
+  type Token,
+} from "../api-client.js";
 import { KickError } from "../errors.js";
+import type { ChannelsAPI } from "./channels.js";
 
 interface GetUsersByIdsParams {
   ids: number[];
@@ -22,8 +27,26 @@ export async function getUser(users: UsersAPI, id: number) {
 }
 
 export class UsersAPI extends KickAPIClient {
+  constructor(
+    private readonly channels: ChannelsAPI,
+    token: Token,
+    options?: ClientOptions,
+  ) {
+    super(token, options);
+  }
+
   protected async getUsersData(params?: URLSearchParams) {
-    return (await this.get(`/v1/users?${params || ""}`, UsersSchema)).data;
+    const { data } = await this.get(`/v1/users?${params || ""}`, UsersSchema);
+    return data.map((user) => ({
+      ...user,
+      getChannel: async () => {
+        const [channel] = await this.channels.getChannelsByBroadcasterIds({
+          ids: [user.userId],
+        });
+        if (!channel) throw new KickError("Channel not found");
+        return channel;
+      },
+    }));
   }
 
   async getUsersByIds({ ids }: GetUsersByIdsParams) {
