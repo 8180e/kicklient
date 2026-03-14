@@ -105,4 +105,26 @@ export abstract class KickAPIClient {
   protected async delete(endpoint: string, body?: unknown) {
     await this.request(endpoint, { method: "DELETE", body });
   }
+
+  protected async *getPaginatedData<T>(
+    endpoint: string,
+    params: URLSearchParams,
+    ResponseSchema: z.ZodType<T>,
+  ) {
+    const Schema = z.object({
+      data: ResponseSchema,
+      pagination: z.object({ next_cursor: z.string() }),
+    });
+
+    let response = await this.get(`${endpoint}?${params}`, Schema);
+
+    yield response.data;
+
+    while (response.pagination.nextCursor) {
+      params.set("cursor", response.pagination.nextCursor);
+      response = await this.get(`${endpoint}?${params}`, Schema);
+
+      yield response.data;
+    }
+  }
 }

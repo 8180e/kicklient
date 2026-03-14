@@ -14,31 +14,14 @@ interface GetCategoriesByIdsParams extends GetCategoriesOptions {
   ids: number[];
 }
 
-const CategoriesSchema = z.object({
-  data: z.array(
-    z.object({ id: z.number(), name: z.string(), thumbnail: z.string() }),
-  ),
-  pagination: z.object({ next_cursor: z.string() }),
-});
+const CategoriesSchema = z.array(
+  z.object({ id: z.number(), name: z.string(), thumbnail: z.string() }),
+);
 
 export class CategoriesAPI extends KickAPIClient {
-  private makeCategoriesRequest(params: URLSearchParams) {
-    return this.get(`/v2/categories?${params}`, CategoriesSchema);
-  }
-
-  private async *getCategoriesData(params: URLSearchParams, limit?: number) {
+  private getCategoriesData(params: URLSearchParams, limit?: number) {
     if (limit) params.set("limit", limit.toString());
-
-    let response = await this.makeCategoriesRequest(params);
-
-    yield response.data;
-
-    while (response.pagination.nextCursor) {
-      params.set("cursor", response.pagination.nextCursor);
-      response = await this.makeCategoriesRequest(params);
-
-      yield response.data;
-    }
+    return this.getPaginatedData("/v2/categories", params, CategoriesSchema);
   }
 
   getCategories({ names = [], tags = [], limit }: GetCategoriesParams) {
