@@ -1,11 +1,6 @@
 import z from "zod";
-import {
-  KickAPIClient,
-  type ClientOptions,
-  type Token,
-} from "../api-client.js";
+import { KickAPIClient } from "../api-client.js";
 import decamelizeKeys from "decamelize-keys";
-import type { UsersAPI } from "./users.js";
 import { KickError } from "../errors.js";
 
 interface CreateChannelRewardParams {
@@ -87,14 +82,6 @@ const AcceptChannelRewardRedemptionsResponse = z.array(
 export class ChannelRewardsAPI extends KickAPIClient {
   private readonly endpoint = "/v1/channels/rewards";
 
-  constructor(
-    private readonly users: UsersAPI,
-    token: Token,
-    options?: ClientOptions,
-  ) {
-    super(token, options);
-  }
-
   private createRewardMethods(rewardId: string) {
     return {
       delete: () => this.deleteChannelReward(rewardId),
@@ -145,7 +132,7 @@ export class ChannelRewardsAPI extends KickAPIClient {
           redeemer: {
             ...redeemer,
             getUser: async () => {
-              const [user] = await this.users.getUsersByIds({
+              const [user] = await this.client.users.getUsersByIds({
                 ids: [redeemer.userId],
               });
               if (!user) throw new KickError("User not found");

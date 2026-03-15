@@ -5,14 +5,13 @@ import {
   type Token,
 } from "../api-client.js";
 import { KickError } from "../errors.js";
-import type { ChannelsAPI } from "./channels.js";
-import type { ChatAPI, PostChatMessageAsUserParams } from "./chat.js";
+import type { PostChatMessageAsUserParams } from "./chat.js";
 import type {
   BanUserParams,
-  ModerationAPI,
   RemoveBanParams,
   TimeoutUserParams,
 } from "./moderation.js";
+import type { UserClient } from "../client.js";
 
 interface GetUsersByIdsParams {
   ids: number[];
@@ -31,14 +30,6 @@ const UsersSchema = z.array(
 );
 
 export class UsersAPI extends KickAPIClient {
-  constructor(
-    private readonly channels: ChannelsAPI,
-    token: Token,
-    options?: ClientOptions,
-  ) {
-    super(token, options);
-  }
-
   protected createByIdParams(ids: number[]) {
     const params = new URLSearchParams();
     for (const id of ids) params.append("id", id.toString());
@@ -50,9 +41,10 @@ export class UsersAPI extends KickAPIClient {
     return data.map((user) => ({
       ...user,
       getChannel: async () => {
-        const [channel] = await this.channels.getChannelsByBroadcasterIds({
-          ids: [user.userId],
-        });
+        const [channel] =
+          await this.client.channels.getChannelsByBroadcasterIds({
+            ids: [user.userId],
+          });
         if (!channel) throw new KickError("Channel not found");
         return channel;
       },
@@ -72,13 +64,11 @@ export class UsersAPI extends KickAPIClient {
 
 export class UserUsersAPI extends UsersAPI {
   constructor(
-    private readonly chat: ChatAPI,
-    private readonly moderation: ModerationAPI,
-    channels: ChannelsAPI,
+    protected readonly client: UserClient,
     token: Token,
     options?: ClientOptions,
   ) {
-    super(channels, token, options);
+    super(client, token, options);
   }
 
   private async getExtendedUsersData(params?: URLSearchParams) {
@@ -89,25 +79,28 @@ export class UserUsersAPI extends UsersAPI {
       postChatMessageAsUserToChannel: (
         content: WithoutBroadcaster<PostChatMessageAsUserParams>,
       ) =>
-        this.chat.postChatMessageAsUser({
+        this.client.chat.postChatMessageAsUser({
           ...content,
           broadcasterUserId: user.userId,
         }),
       banFromBroadcaster: (params: WithoutUser<BanUserParams>) =>
-        this.moderation.banUser({ ...params, userId: user.userId }),
+        this.client.moderation.banUser({ ...params, userId: user.userId }),
       timeoutFromBroadcaster: (params: WithoutUser<TimeoutUserParams>) =>
-        this.moderation.timeoutUser({ ...params, userId: user.userId }),
+        this.client.moderation.timeoutUser({ ...params, userId: user.userId }),
       removeBanFromBroadcaster: (params: WithoutUser<RemoveBanParams>) =>
-        this.moderation.removeBan({ ...params, userId: user.userId }),
+        this.client.moderation.removeBan({ ...params, userId: user.userId }),
       banUserFromChat: (params: WithoutBroadcaster<BanUserParams>) =>
-        this.moderation.banUser({ ...params, broadcasterUserId: user.userId }),
+        this.client.moderation.banUser({
+          ...params,
+          broadcasterUserId: user.userId,
+        }),
       timeoutUserFromChat: (params: WithoutBroadcaster<TimeoutUserParams>) =>
-        this.moderation.timeoutUser({
+        this.client.moderation.timeoutUser({
           ...params,
           broadcasterUserId: user.userId,
         }),
       removeUserBan: (params: WithoutBroadcaster<RemoveBanParams>) =>
-        this.moderation.removeBan({
+        this.client.moderation.removeBan({
           ...params,
           broadcasterUserId: user.userId,
         }),

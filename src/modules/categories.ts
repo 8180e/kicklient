@@ -1,10 +1,6 @@
 import z from "zod";
-import {
-  KickAPIClient,
-  type ClientOptions,
-  type Token,
-} from "../api-client.js";
-import type { GetLivestreamsParams, LivestreamsAPI } from "./livestreams.js";
+import { KickAPIClient } from "../api-client.js";
+import type { GetLivestreamsParams } from "./livestreams.js";
 
 interface GetCategoriesOptions {
   limit?: number;
@@ -24,14 +20,6 @@ const CategoriesSchema = z.array(
 );
 
 export class CategoriesAPI extends KickAPIClient {
-  constructor(
-    private readonly livestreams: LivestreamsAPI,
-    token: Token,
-    options?: ClientOptions,
-  ) {
-    super(token, options);
-  }
-
   private async *getCategoriesData(params: URLSearchParams, limit?: number) {
     if (limit) params.set("limit", limit.toString());
 
@@ -45,7 +33,7 @@ export class CategoriesAPI extends KickAPIClient {
       yield page.map((category) => ({
         ...category,
         getLivestreams: (params: Omit<GetLivestreamsParams, "categoryId">) =>
-          this.livestreams.getLivestreams({
+          this.client.livestreams.getLivestreams({
             ...params,
             categoryId: category.id,
           }),
