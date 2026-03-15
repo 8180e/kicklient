@@ -1,8 +1,9 @@
 import z from "zod";
-import { UserKickAPIClient } from "../api-client.js";
-import { parseSchema } from "../utils.js";
+import { KickAPIClient } from "../api-client.js";
 
-const GetKicksLeaderboardOptionsSchema = z.int().min(1).max(100);
+interface GetKicksLeaderboardParams {
+  top?: number;
+}
 
 const KicksDataSchema = z.array(
   z.object({
@@ -10,7 +11,7 @@ const KicksDataSchema = z.array(
     rank: z.number(),
     user_id: z.number(),
     username: z.string(),
-  })
+  }),
 );
 
 const KicksLeaderboardSchema = z.object({
@@ -19,17 +20,12 @@ const KicksLeaderboardSchema = z.object({
   week: KicksDataSchema,
 });
 
-export class KicksAPI extends UserKickAPIClient {
-  getKicksLeaderboard(top?: number) {
-    this.requireScopes("kicks:read");
-
+export class KicksAPI extends KickAPIClient {
+  async getKicksLeaderboard({ top }: GetKicksLeaderboardParams) {
     const params = new URLSearchParams();
+    if (top) params.append("top", top.toString());
 
-    if (top) {
-      parseSchema(GetKicksLeaderboardOptionsSchema, top);
-      params.append("top", top.toString());
-    }
-
-    return this.get("/kicks/leaderboard", KicksLeaderboardSchema);
+    return (await this.get("/v1/kicks/leaderboard", KicksLeaderboardSchema))
+      .data;
   }
 }
