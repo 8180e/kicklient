@@ -2,12 +2,12 @@ import z from "zod";
 import { KickAPIClient } from "../api-client.js";
 import decamelizeKeys from "decamelize-keys";
 
-interface PostChatMessageAsBotParams {
+export interface PostChatMessageAsBotParams {
   content: string;
   replyToMessageId?: string;
 }
 
-interface PostChatMessageAsUserParams extends PostChatMessageAsBotParams {
+export interface PostChatMessageAsUserParams extends PostChatMessageAsBotParams {
   broadcasterUserId: number;
 }
 
