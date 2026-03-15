@@ -6,7 +6,7 @@ import {
 } from "../api-client.js";
 import { KickError } from "../errors.js";
 import decamelizeKeys from "decamelize-keys";
-import { getUser, type UsersAPI } from "./users.js";
+import type { UsersAPI } from "./users.js";
 
 interface GetChannelsByBroadcasterIdsParams {
   ids: number[];
@@ -65,7 +65,8 @@ export class ChannelsAPI extends KickAPIClient {
     ).data.map(({ stream: { startTime, ...stream }, ...channel }) => ({
       ...channel,
       stream: { ...stream, startTime: new Date(startTime) },
-      getBroadcasterData: () => getUser(this.users, channel.broadcasterUserId),
+      getBroadcasterData: () =>
+        this.users.getUserById(channel.broadcasterUserId),
     }));
   }
 
