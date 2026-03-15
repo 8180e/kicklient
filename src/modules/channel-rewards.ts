@@ -13,7 +13,7 @@ interface CreateChannelRewardParams {
   title: string;
 }
 
-type UpdateChannelRewardParams = Partial<CreateChannelRewardParams>;
+export type UpdateChannelRewardParams = Partial<CreateChannelRewardParams>;
 
 interface GetChannelRewardRedemptionsByIdsParams {
   ids: string[];

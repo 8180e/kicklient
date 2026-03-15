@@ -7,7 +7,7 @@ interface ModerationParams {
 }
 
 export interface BanUserParams extends ModerationParams {
-  reason?: string;
+  reason?: string | undefined;
 }
 
 export interface TimeoutUserParams extends BanUserParams {

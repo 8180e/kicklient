@@ -63,6 +63,12 @@ export class ChannelsAPI extends KickAPIClient {
     return this.getChannelsData(params);
   }
 
+  async getChannelByBroadcasterId(id: number) {
+    const [channel] = await this.getChannelsByBroadcasterIds({ ids: [id] });
+    if (!channel) throw new KickError("Channel not found");
+    return channel;
+  }
+
   getChannelsBySlug({ slugs }: GetChannelsBySlugsParams) {
     const params = new URLSearchParams();
     for (const slug of slugs) params.append("slug", slug);

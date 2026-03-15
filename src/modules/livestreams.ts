@@ -1,6 +1,7 @@
 import z from "zod";
 import { KickAPIClient } from "../api-client.js";
 import decamelizeKeys from "decamelize-keys";
+import { KickError } from "../errors.js";
 
 export interface GetLivestreamsParams {
   broadcasterUserIds?: number[];
@@ -55,6 +56,12 @@ export class LivestreamsAPI extends KickAPIClient {
       ...stream,
       startedAt: new Date(startedAt),
     }));
+  }
+
+  async getLivestreamByBroadcasterId(id: number) {
+    const [stream] = await this.getLivestreams({ broadcasterUserIds: [id] });
+    if (!stream) throw new KickError("Stream not found");
+    return stream;
   }
 
   async getLivestreamsStats() {
