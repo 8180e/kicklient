@@ -7,10 +7,19 @@ import {
 import { KickError } from "../errors.js";
 import type { ChannelsAPI } from "./channels.js";
 import type { ChatAPI, PostChatMessageAsUserParams } from "./chat.js";
+import type {
+  BanUserParams,
+  ModerationAPI,
+  RemoveBanParams,
+  TimeoutUserParams,
+} from "./moderation.js";
 
 interface GetUsersByIdsParams {
   ids: number[];
 }
+
+type WithoutUser<T> = Omit<T, "userId">;
+type WithoutBroadcaster<T> = Omit<T, "broadcasterUserId">;
 
 const UsersSchema = z.array(
   z.object({
@@ -64,6 +73,7 @@ export class UsersAPI extends KickAPIClient {
 export class UserUsersAPI extends UsersAPI {
   constructor(
     private readonly chat: ChatAPI,
+    private readonly moderation: ModerationAPI,
     channels: ChannelsAPI,
     token: Token,
     options?: ClientOptions,
@@ -77,10 +87,28 @@ export class UserUsersAPI extends UsersAPI {
     return users.map((user) => ({
       ...user,
       postChatMessageAsUserToChannel: (
-        content: Omit<PostChatMessageAsUserParams, "broadcasterUserId">,
+        content: WithoutBroadcaster<PostChatMessageAsUserParams>,
       ) =>
         this.chat.postChatMessageAsUser({
           ...content,
+          broadcasterUserId: user.userId,
+        }),
+      banFromBroadcaster: (params: WithoutUser<BanUserParams>) =>
+        this.moderation.banUser({ ...params, userId: user.userId }),
+      timeoutFromBroadcaster: (params: WithoutUser<TimeoutUserParams>) =>
+        this.moderation.timeoutUser({ ...params, userId: user.userId }),
+      removeBanFromBroadcaster: (params: WithoutUser<RemoveBanParams>) =>
+        this.moderation.removeBan({ ...params, userId: user.userId }),
+      banUserFromChat: (params: WithoutBroadcaster<BanUserParams>) =>
+        this.moderation.banUser({ ...params, broadcasterUserId: user.userId }),
+      timeoutUserFromChat: (params: WithoutBroadcaster<TimeoutUserParams>) =>
+        this.moderation.timeoutUser({
+          ...params,
+          broadcasterUserId: user.userId,
+        }),
+      removeUserBan: (params: WithoutBroadcaster<RemoveBanParams>) =>
+        this.moderation.removeBan({
+          ...params,
           broadcasterUserId: user.userId,
         }),
     }));

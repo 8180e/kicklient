@@ -3,18 +3,18 @@ import decamelizeKeys from "decamelize-keys";
 
 interface ModerationParams {
   broadcasterUserId: number;
-  userId: string;
+  userId: number;
 }
 
-interface BanUserParams extends ModerationParams {
+export interface BanUserParams extends ModerationParams {
   reason?: string;
 }
 
-interface TimeoutUserParams extends BanUserParams {
+export interface TimeoutUserParams extends BanUserParams {
   duration: number;
 }
 
-type RemoveBanParams = ModerationParams;
+export type RemoveBanParams = ModerationParams;
 
 export class ModerationAPI extends KickAPIClient {
   async banUser(options: BanUserParams) {
