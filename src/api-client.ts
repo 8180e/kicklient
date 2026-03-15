@@ -1,7 +1,7 @@
 import z from "zod";
 import { KickAPIError, KickResponseShapeError } from "./errors.js";
 import camelcaseKeys, { type ObjectLike } from "camelcase-keys";
-import type { AppClient } from "./client.js";
+import type { BaseClient } from "./client.js";
 
 export interface Token {
   accessToken: string;
@@ -36,7 +36,7 @@ export abstract class KickAPIClient {
   private readonly options;
 
   constructor(
-    protected client: AppClient,
+    protected client: BaseClient,
     private readonly token: Token,
     options: ClientOptions = {},
   ) {
