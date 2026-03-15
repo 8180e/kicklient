@@ -1,7 +1,12 @@
 import z from "zod";
-import { KickAPIClient, UserKickAPIClient } from "../api-client.js";
+import { KickAPIClient } from "../api-client.js";
 
-export const EventSchema = z.enum([
+interface CreateEventsSubscriptionsParams {
+  broadcasterUserId: number;
+  events: z.infer<typeof EventSchema>[];
+}
+
+const EventSchema = z.enum([
   "chat.message.sent",
   "channel.followed",
   "channel.subscription.renewal",
@@ -24,21 +29,15 @@ const EventSubscriptionSchema = z.array(
     method: z.string(),
     updated_at: z.string(),
     version: z.number(),
-  })
+  }),
 );
-
-const CreateEventRequestSchema = z.object({
-  broadcasterUserId: z.int().optional(),
-  events: z.array(z.object({ name: z.string(), version: z.int() })),
-  method: z.literal("webhook"),
-});
 
 const CreateEventResponseSchema = z.array(
   z.object({
     subscription_id: z.string(),
     name: EventSchema,
     version: z.number(),
-  })
+  }),
 );
 
 export type KickEvent = z.infer<typeof EventSchema>;
@@ -49,76 +48,56 @@ export class EventsAPI extends KickAPIClient {
     if (broadcasterUserId) {
       params.append("broadcaster_user_id", broadcasterUserId.toString());
     }
-    const client = this;
-    return (
-      await this.get(`/events/subscriptions?${params}`, EventSubscriptionSchema)
-    ).map(({ createdAt, updatedAt, ...subscription }) => ({
+
+    const { data } = await this.get(
+      `/v1/events/subscriptions?${params}`,
+      EventSubscriptionSchema,
+    );
+
+    return data.map(({ createdAt, updatedAt, ...subscription }) => ({
       createdAt: new Date(createdAt),
       updatedAt: new Date(updatedAt),
       ...subscription,
-      async delete() {
-        await client.deleteEventsSubscriptions(subscription.id);
-      },
+      delete: () => this.deleteEventsSubscriptions(subscription.id),
     }));
   }
 
-  async createEventsSubscriptions(
-    broadcasterUserId: number,
-    events: z.infer<typeof EventSchema>[]
-  ) {
-    const client = this;
-    return (
-      await (
-        await this.post(
-          "/events/subscriptions",
-          {
-            broadcasterUserId,
-            events: events.map((name) => ({ name, version: 1 })),
-            method: "webhook",
-          },
-          CreateEventRequestSchema
-        )
-      ).getData(CreateEventResponseSchema)
-    ).map((subscription) => ({
+  async createEventsSubscriptions({
+    broadcasterUserId,
+    events,
+  }: CreateEventsSubscriptionsParams) {
+    const res = await this.post("/v1/events/subscriptions", {
+      broadcaster_user_id: broadcasterUserId,
+      events: events.map((name) => ({ name, version: 1 })),
+      method: "webhook",
+    });
+    const { data } = await res.getData(CreateEventResponseSchema);
+    return data.map((subscription) => ({
       ...subscription,
-      async delete() {
-        await client.deleteEventsSubscriptions(subscription.subscriptionId);
-      },
+      delete: () => this.deleteEventsSubscriptions(subscription.subscriptionId),
     }));
   }
 
   deleteEventsSubscriptions(...ids: string[]) {
     const params = new URLSearchParams();
-    for (const id of ids) {
-      params.append("id", id);
-    }
-    return this.delete(`/events/subscriptions?${params}`);
+    for (const id of ids) params.append("id", id);
+    return this.delete(`/v1/events/subscriptions?${params}`);
   }
 }
 
-export class UserEventsAPI extends UserKickAPIClient {
-  private readonly api = new EventsAPI(this.token, this.onTokensRefreshed);
+export class UserEventsAPI extends EventsAPI {
+  async createEventsSubscriptions({
+    events,
+  }: Omit<CreateEventsSubscriptionsParams, "broadcasterUserId">) {
+    const res = await this.post("/v1/events/subscriptions", {
+      events: events.map((name) => ({ name, version: 1 })),
+      method: "webhook",
+    });
+    const { data } = await res.getData(CreateEventResponseSchema);
 
-  getEventsSubscriptions(broadcasterUserId?: number) {
-    return this.api.getEventsSubscriptions(broadcasterUserId);
-  }
-
-  async createEventsSubscriptions(events: KickEvent[]) {
-    this.requireScopes("events:subscribe");
-    return (
-      await this.post(
-        "/events/subscriptions",
-        {
-          events: events.map((name) => ({ name, version: 1 })),
-          method: "webhook",
-        },
-        CreateEventRequestSchema
-      )
-    ).getData(CreateEventResponseSchema);
-  }
-
-  deleteEventsSubscriptions(...ids: string[]) {
-    this.requireScopes("events:subscribe");
-    return this.api.deleteEventsSubscriptions(...ids);
+    return data.map((subscription) => ({
+      ...subscription,
+      delete: () => this.deleteEventsSubscriptions(subscription.subscriptionId),
+    }));
   }
 }
