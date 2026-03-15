@@ -6,6 +6,7 @@ import {
 } from "../api-client.js";
 import { KickError } from "../errors.js";
 import type { ChannelsAPI } from "./channels.js";
+import type { ChatAPI, PostChatMessageAsUserParams } from "./chat.js";
 
 interface GetUsersByIdsParams {
   ids: number[];
@@ -35,6 +36,12 @@ export class UsersAPI extends KickAPIClient {
     super(token, options);
   }
 
+  protected createByIdParams(ids: number[]) {
+    const params = new URLSearchParams();
+    for (const id of ids) params.append("id", id.toString());
+    return params;
+  }
+
   protected async getUsersData(params?: URLSearchParams) {
     const { data } = await this.get(`/v1/users?${params || ""}`, UsersSchema);
     return data.map((user) => ({
@@ -50,15 +57,41 @@ export class UsersAPI extends KickAPIClient {
   }
 
   async getUsersByIds({ ids }: GetUsersByIdsParams) {
-    const params = new URLSearchParams();
-    for (const id of ids) params.append("id", id.toString());
-    return this.getUsersData(params);
+    return this.getUsersData(this.createByIdParams(ids));
   }
 }
 
 export class UserUsersAPI extends UsersAPI {
+  constructor(
+    private readonly chat: ChatAPI,
+    channels: ChannelsAPI,
+    token: Token,
+    options?: ClientOptions,
+  ) {
+    super(channels, token, options);
+  }
+
+  private async getExtendedUsersData(params?: URLSearchParams) {
+    const users = await this.getUsersData(params);
+
+    return users.map((user) => ({
+      ...user,
+      postChatMessageAsUserToChannel: (
+        content: Omit<PostChatMessageAsUserParams, "broadcasterUserId">,
+      ) =>
+        this.chat.postChatMessageAsUser({
+          ...content,
+          broadcasterUserId: user.userId,
+        }),
+    }));
+  }
+
+  async getUsersByIds({ ids }: GetUsersByIdsParams) {
+    return this.getExtendedUsersData(this.createByIdParams(ids));
+  }
+
   async getAuthenticatedUser() {
-    const user = (await this.getUsersData())[0];
+    const [user] = await this.getExtendedUsersData();
     if (!user) {
       throw new KickError(
         "Expected the API to return the authenticated user, but got no user",
