@@ -21,12 +21,6 @@ const UsersSchema = z.array(
   }),
 );
 
-export async function getUser(users: UsersAPI, id: number) {
-  const [user] = await users.getUsersByIds({ ids: [id] });
-  if (!user) throw new KickError("User not found");
-  return user;
-}
-
 export class UsersAPI extends KickAPIClient {
   constructor(
     private readonly channels: ChannelsAPI,
@@ -58,6 +52,12 @@ export class UsersAPI extends KickAPIClient {
 
   async getUsersByIds({ ids }: GetUsersByIdsParams) {
     return this.getUsersData(this.createByIdParams(ids));
+  }
+
+  async getUserById(id: number) {
+    const [user] = await this.getUsersByIds({ ids: [id] });
+    if (!user) throw new KickError("User not found");
+    return user;
   }
 }
 
