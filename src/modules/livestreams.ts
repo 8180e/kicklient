@@ -1,16 +1,14 @@
 import z from "zod";
 import { KickAPIClient } from "../api-client.js";
-import { formatRequestBody } from "../utils.js";
+import decamelizeKeys from "decamelize-keys";
 
-const GetLivestreamsOptionsSchema = z
-  .object({
-    broadcasterUserId: z.union([z.int(), z.array(z.int()).max(50)]),
-    categoryId: z.int(),
-    language: z.string(),
-    limit: z.int().min(1).max(100),
-    sort: z.enum(["viewer_count", "started_at"]),
-  })
-  .partial();
+interface GetLivestreamsParams {
+  broadcasterUserIds?: number[];
+  categoryId?: number;
+  language?: string;
+  limit?: number;
+  sort?: "viewer_count" | "started_at";
+}
 
 const LivestreamsSchema = z.array(
   z.object({
@@ -29,42 +27,38 @@ const LivestreamsSchema = z.array(
     stream_title: z.string(),
     thumbnail: z.string(),
     viewer_count: z.number(),
-  })
+  }),
 );
 
 const LivestreamStatsSchema = z.object({ total_count: z.number() });
 
 export class LivestreamsAPI extends KickAPIClient {
-  async getLivestreams(options?: z.infer<typeof GetLivestreamsOptionsSchema>) {
-    const params = new URLSearchParams();
-
-    if (options) {
-      const reqBody = formatRequestBody(GetLivestreamsOptionsSchema, options);
-
-      for (const key in reqBody) {
-        const value = reqBody[key as keyof typeof reqBody];
-
-        if (Array.isArray(value)) {
-          for (const v of value) {
-            params.append(key, v.toString());
-          }
-        } else {
-          if (value) {
-            params.append(key, value.toString());
-          }
-        }
-      }
+  async getLivestreams({
+    broadcasterUserIds = [],
+    categoryId,
+    limit,
+    ...params
+  }: GetLivestreamsParams) {
+    const urlParams = new URLSearchParams(decamelizeKeys(params));
+    for (const broadcasterUserId of broadcasterUserIds) {
+      urlParams.append("broadcaster_user_id", broadcasterUserId.toString());
     }
+    if (categoryId) urlParams.set("category_id", categoryId.toString());
+    if (limit) urlParams.set("limit", limit.toString());
 
-    return (await this.get(`/livestreams?${params}`, LivestreamsSchema)).map(
-      ({ startedAt, ...stream }) => ({
-        ...stream,
-        startedAt: new Date(startedAt),
-      })
+    const { data } = await this.get(
+      `/v1/livestreams?${params}`,
+      LivestreamsSchema,
     );
+
+    return data.map(({ startedAt, ...stream }) => ({
+      ...stream,
+      startedAt: new Date(startedAt),
+    }));
   }
 
-  getLivestreamsStats() {
-    return this.get("/livestreams/stats", LivestreamStatsSchema);
+  async getLivestreamsStats() {
+    return (await this.get("/v1/livestreams/stats", LivestreamStatsSchema))
+      .data;
   }
 }
