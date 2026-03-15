@@ -2,7 +2,7 @@ import z from "zod";
 import { KickAPIClient } from "../api-client.js";
 import decamelizeKeys from "decamelize-keys";
 
-interface GetLivestreamsParams {
+export interface GetLivestreamsParams {
   broadcasterUserIds?: number[];
   categoryId?: number;
   language?: string;
@@ -38,7 +38,7 @@ export class LivestreamsAPI extends KickAPIClient {
     categoryId,
     limit,
     ...params
-  }: GetLivestreamsParams) {
+  }: GetLivestreamsParams = {}) {
     const urlParams = new URLSearchParams(decamelizeKeys(params));
     for (const broadcasterUserId of broadcasterUserIds) {
       urlParams.append("broadcaster_user_id", broadcasterUserId.toString());
