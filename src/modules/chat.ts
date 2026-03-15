@@ -11,10 +11,9 @@ interface PostChatMessageAsUserParams extends PostChatMessageAsBotParams {
   broadcasterUserId: number;
 }
 
-type PostChatMessageParams = (
-  | { type: "user"; broadcasterUserId: number }
-  | { type: "bot" }
-) & { content: string; replyToMessageId?: string };
+type PostChatMessageParams =
+  | ({ type: "user" } & PostChatMessageAsUserParams)
+  | ({ type: "bot" } & PostChatMessageAsBotParams);
 
 const PostMessageResponseSchema = z.object({
   is_sent: z.boolean(),
