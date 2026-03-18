@@ -1,5 +1,7 @@
+import type { ObjectLike } from "camelcase-keys";
 import crypto from "crypto";
 import z from "zod";
+import { parseData } from "./utils.js";
 
 const UserSchema = z.object({
   is_anonymous: z.boolean(),
@@ -10,9 +12,9 @@ const UserSchema = z.object({
   channel_slug: z.string(),
 });
 
-export const BaseEventSchema = z.object({ broadcaster: UserSchema });
+const BaseEventSchema = z.object({ broadcaster: UserSchema });
 
-export const ChatMessageSentSchema = BaseEventSchema.extend({
+const ChatMessageSentSchema = BaseEventSchema.extend({
   message_id: z.string(),
   replies_to: z.union([
     z.object({
@@ -43,32 +45,30 @@ export const ChatMessageSentSchema = BaseEventSchema.extend({
   ),
 });
 
-export const ChannelFollowedSchema = BaseEventSchema.extend({
-  follower: UserSchema,
-});
+const ChannelFollowedSchema = BaseEventSchema.extend({ follower: UserSchema });
 
-export const ChannelSubscriptionRenewalSchema = BaseEventSchema.extend({
+const ChannelSubscriptionRenewalSchema = BaseEventSchema.extend({
   subscriber: UserSchema,
   duration: z.number(),
   created_at: z.string(),
   expires_at: z.string(),
 });
 
-export const ChannelSubscriptionGiftsSchema = BaseEventSchema.extend({
+const ChannelSubscriptionGiftsSchema = BaseEventSchema.extend({
   gifter: z.union([UserSchema, z.object({ is_anonymous: z.literal(true) })]),
   giftees: z.array(UserSchema),
   created_at: z.string(),
   expires_at: z.string(),
 });
 
-export const ChannelSubscriptionNewSchema = BaseEventSchema.extend({
+const ChannelSubscriptionNewSchema = BaseEventSchema.extend({
   subscriber: UserSchema,
   duration: z.number(),
   created_at: z.string(),
   expires_at: z.string(),
 });
 
-export const ChannelRewardRedemptionUpdatedSchema = BaseEventSchema.extend({
+const ChannelRewardRedemptionUpdatedSchema = BaseEventSchema.extend({
   id: z.string(),
   user_input: z.string(),
   status: z.enum(["pending", "accepted", "rejected"]),
@@ -83,14 +83,14 @@ export const ChannelRewardRedemptionUpdatedSchema = BaseEventSchema.extend({
   broadcaster: UserSchema.omit({ is_anonymous: true }),
 });
 
-export const LivestreamStatusUpdatedSchema = BaseEventSchema.extend({
+const LivestreamStatusUpdatedSchema = BaseEventSchema.extend({
   is_live: z.boolean(),
   title: z.string(),
   started_at: z.string(),
   ended_at: z.union([z.string(), z.null()]),
 });
 
-export const LivestreamMetadataUpdatedSchema = BaseEventSchema.extend({
+const LivestreamMetadataUpdatedSchema = BaseEventSchema.extend({
   metadata: z.object({
     title: z.string(),
     language: z.string(),
@@ -103,7 +103,7 @@ export const LivestreamMetadataUpdatedSchema = BaseEventSchema.extend({
   }),
 });
 
-export const ModerationBannedSchema = BaseEventSchema.extend({
+const ModerationBannedSchema = BaseEventSchema.extend({
   moderator: UserSchema,
   banned_user: UserSchema,
   metadata: z.object({
@@ -113,7 +113,7 @@ export const ModerationBannedSchema = BaseEventSchema.extend({
   }),
 });
 
-export const KicksGiftedSchema = BaseEventSchema.extend({
+const KicksGiftedSchema = BaseEventSchema.extend({
   broadcaster: UserSchema.omit({ is_anonymous: true }),
   sender: UserSchema.omit({ is_anonymous: true }),
   gift: z.object({
@@ -139,4 +139,105 @@ twIDAQAB
 -----END PUBLIC KEY-----
 `;
 
-export const publicKey = crypto.createPublicKey(PUBLIC_KEY);
+interface EventSchemas {
+  "chat.message.sent": typeof ChatMessageSentSchema;
+  "channel.followed": typeof ChannelFollowedSchema;
+  "channel.subscription.renewal": typeof ChannelSubscriptionRenewalSchema;
+  "channel.subscription.gifts": typeof ChannelSubscriptionGiftsSchema;
+  "channel.subscription.new": typeof ChannelSubscriptionNewSchema;
+  "channel.reward.redemption.updated": typeof ChannelRewardRedemptionUpdatedSchema;
+  "livestream.status.updated": typeof LivestreamStatusUpdatedSchema;
+  "livestream.metadata.updated": typeof LivestreamMetadataUpdatedSchema;
+  "moderation.banned": typeof ModerationBannedSchema;
+  "kicks.gifted": typeof KicksGiftedSchema;
+}
+
+const publicKey = crypto.createPublicKey(PUBLIC_KEY);
+
+export type FormattedEventData<T extends keyof EventSchemas> = ReturnType<
+  typeof parseData<z.infer<EventSchemas[T]>>
+>;
+
+type Callbacks = {
+  [K in keyof EventSchemas]?: (data: FormattedEventData<K>) => unknown;
+};
+
+type Handler = (req: Request) => Promise<Response>;
+
+export function createWebhookHandler(callbacks: Callbacks): Handler {
+  return async (req) => {
+    try {
+      const messageId = req.headers.get("kick-event-message-id");
+      const timestamp = req.headers.get("kick-event-message-timestamp");
+      const signature = req.headers.get("kick-event-signature");
+      const event = req.headers.get("kick-event-type");
+
+      if (!messageId || !timestamp || !signature || !event) {
+        return new Response(undefined, { status: 401 });
+      }
+
+      const rawBody = await req.text();
+
+      const verifier = crypto.createVerify("RSA-SHA256");
+      verifier.update(`${messageId}.${timestamp}.${rawBody}`);
+      verifier.end();
+
+      const signatureBuffer = Buffer.from(signature, "base64");
+      const valid = verifier.verify(publicKey, signatureBuffer);
+
+      if (!valid) return new Response(undefined, { status: 401 });
+
+      const data = JSON.parse(rawBody);
+
+      function callWithData<T extends ObjectLike | readonly ObjectLike[]>(
+        Schema: z.ZodType<T>,
+        handler?: (data: ReturnType<typeof parseData<T>>) => unknown,
+      ) {
+        return handler?.(parseData(data, Schema));
+      }
+
+      switch (event) {
+        case "chat.message.sent":
+          await callWithData(ChatMessageSentSchema, callbacks[event]);
+          break;
+        case "channel.followed":
+          await callWithData(ChannelFollowedSchema, callbacks[event]);
+          break;
+        case "channel.subscription.renewal":
+          await callWithData(
+            ChannelSubscriptionRenewalSchema,
+            callbacks[event],
+          );
+          break;
+        case "channel.subscription.gifts":
+          await callWithData(ChannelSubscriptionGiftsSchema, callbacks[event]);
+          break;
+        case "channel.subscription.new":
+          await callWithData(ChannelSubscriptionNewSchema, callbacks[event]);
+          break;
+        case "channel.reward.redemption.updated":
+          await callWithData(
+            ChannelRewardRedemptionUpdatedSchema,
+            callbacks[event],
+          );
+          break;
+        case "livestream.status.updated":
+          await callWithData(LivestreamStatusUpdatedSchema, callbacks[event]);
+          break;
+        case "livestream.metadata.updated":
+          await callWithData(LivestreamMetadataUpdatedSchema, callbacks[event]);
+          break;
+        case "moderation.banned":
+          await callWithData(ModerationBannedSchema, callbacks[event]);
+          break;
+        case "kicks.gifted":
+          await callWithData(KicksGiftedSchema, callbacks[event]);
+          break;
+      }
+
+      return new Response(undefined, { status: 200 });
+    } catch {
+      return new Response(undefined, { status: 401 });
+    }
+  };
+}

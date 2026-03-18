@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import type { ClientOptions, Token } from "./api-client.js";
 import { getAppAccessToken, refreshToken } from "./auth.js";
 import { CategoriesAPI } from "./modules/categories.js";
@@ -10,19 +9,9 @@ import { LivestreamsAPI } from "./modules/livestreams.js";
 import { ModerationAPI } from "./modules/moderation.js";
 import { UsersAPI, UserUsersAPI } from "./modules/users.js";
 import {
-  ChannelFollowedSchema,
-  ChannelRewardRedemptionUpdatedSchema,
-  ChannelSubscriptionGiftsSchema,
-  ChannelSubscriptionNewSchema,
-  ChannelSubscriptionRenewalSchema,
-  ChatMessageSentSchema,
-  KicksGiftedSchema,
-  LivestreamMetadataUpdatedSchema,
-  LivestreamStatusUpdatedSchema,
-  ModerationBannedSchema,
-  publicKey,
+  createWebhookHandler,
+  type FormattedEventData,
 } from "./events-handler.js";
-import { parseData } from "./utils.js";
 import {
   ChannelRewardsAPI,
   type UpdateChannelRewardParams,
@@ -62,144 +51,112 @@ export abstract class BaseClient {
   }
 
   protected readonly eventDataFormatters = {
-    "chat.message.sent": (data: unknown) => {
-      const formattedData = parseData(data, ChatMessageSentSchema);
-      return {
-        ...formattedData,
-        repliesTo: formattedData.repliesTo && {
-          ...formattedData.repliesTo,
-          sender: {
-            ...formattedData.repliesTo.sender,
-            ...this.createUserActions(formattedData.repliesTo.sender.userId),
-          },
-        },
+    "chat.message.sent": (data: FormattedEventData<"chat.message.sent">) => ({
+      ...data,
+      repliesTo: data.repliesTo && {
+        ...data.repliesTo,
         sender: {
-          ...formattedData.sender,
-          ...this.createUserActions(formattedData.sender.userId),
+          ...data.repliesTo.sender,
+          ...this.createUserActions(data.repliesTo.sender.userId),
         },
-      };
-    },
-    "channel.followed": (data: unknown) => {
-      const formattedData = parseData(data, ChannelFollowedSchema);
-      return {
-        ...formattedData,
-        follower: {
-          ...formattedData.follower,
-          ...this.createUserActions(formattedData.follower.userId),
-        },
-      };
-    },
-    "channel.subscription.renewal": (data: unknown) => {
-      const { createdAt, expiresAt, ...formattedData } = parseData(
-        data,
-        ChannelSubscriptionRenewalSchema,
-      );
-      return {
-        ...formattedData,
-        subscriber: {
-          ...formattedData.subscriber,
-          ...this.createUserActions(formattedData.subscriber.userId),
-        },
-        createdAt: new Date(createdAt),
-        expiresAt: new Date(expiresAt),
-      };
-    },
-    "channel.subscription.gifts": (data: unknown) => {
-      const { createdAt, expiresAt, ...formattedData } = parseData(
-        data,
-        ChannelSubscriptionGiftsSchema,
-      );
-      return {
-        ...formattedData,
-        gifter: formattedData.gifter.isAnonymous
-          ? { isAnonymous: true as const }
-          : {
-              ...formattedData.gifter,
-              ...this.createUserActions(formattedData.gifter.userId),
-            },
-        giftees: formattedData.giftees.map((giftee) => ({
-          ...giftee,
-          ...this.createUserActions(giftee.userId),
-        })),
+      },
+      sender: { ...data.sender, ...this.createUserActions(data.sender.userId) },
+    }),
+    "channel.followed": (data: FormattedEventData<"channel.followed">) => ({
+      ...data,
+      follower: {
+        ...data.follower,
+        ...this.createUserActions(data.follower.userId),
+      },
+    }),
+    "channel.subscription.renewal": ({
+      createdAt,
+      expiresAt,
+      ...data
+    }: FormattedEventData<"channel.subscription.renewal">) => ({
+      ...data,
+      subscriber: {
+        ...data.subscriber,
+        ...this.createUserActions(data.subscriber.userId),
+      },
+      createdAt: new Date(createdAt),
+      expiresAt: new Date(expiresAt),
+    }),
+    "channel.subscription.gifts": ({
+      createdAt,
+      expiresAt,
+      ...data
+    }: FormattedEventData<"channel.subscription.gifts">) => ({
+      ...data,
+      gifter: data.gifter.isAnonymous
+        ? { isAnonymous: true as const }
+        : { ...data.gifter, ...this.createUserActions(data.gifter.userId) },
+      giftees: data.giftees.map((giftee) => ({
+        ...giftee,
+        ...this.createUserActions(giftee.userId),
+      })),
+      createdAt: new Date(createdAt),
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+    }),
+    "channel.subscription.new": ({
+      createdAt,
+      expiresAt,
+      ...data
+    }: FormattedEventData<"channel.subscription.new">) => ({
+      ...data,
+      subscriber: {
+        ...data.subscriber,
+        ...this.createUserActions(data.subscriber.userId),
+      },
+      createdAt: new Date(createdAt),
+      expiresAt: new Date(expiresAt),
+    }),
+    "channel.reward.redemption.updated": ({
+      redeemedAt,
+      ...data
+    }: FormattedEventData<"channel.reward.redemption.updated">) => ({
+      ...data,
+      redeemer: {
+        ...data.redeemer,
+        ...this.createUserActions(data.redeemer.userId),
+      },
+      redeemedAt: new Date(redeemedAt),
+    }),
+    "livestream.status.updated": ({
+      startedAt,
+      endedAt,
+      ...data
+    }: FormattedEventData<"livestream.status.updated">) => ({
+      ...data,
+      startedAt: new Date(startedAt),
+      endedAt: new Date(endedAt || 0),
+    }),
+    "livestream.metadata.updated": (
+      data: FormattedEventData<"livestream.metadata.updated">,
+    ) => data,
+    "moderation.banned": ({
+      metadata: { createdAt, expiresAt, ...metadata },
+      ...data
+    }: FormattedEventData<"moderation.banned">) => ({
+      ...data,
+      bannedUser: {
+        ...data.bannedUser,
+        ...this.createUserActions(data.bannedUser.userId),
+      },
+      metadata: {
+        ...metadata,
         createdAt: new Date(createdAt),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
-      };
-    },
-    "channel.subscription.new": (data: unknown) => {
-      const { createdAt, expiresAt, ...formattedData } = parseData(
-        data,
-        ChannelSubscriptionNewSchema,
-      );
-      return {
-        ...formattedData,
-        subscriber: {
-          ...formattedData.subscriber,
-          ...this.createUserActions(formattedData.subscriber.userId),
-        },
-        createdAt: new Date(createdAt),
-        expiresAt: new Date(expiresAt),
-      };
-    },
-    "channel.reward.redemption.updated": (data: unknown) => {
-      const { redeemedAt, ...formattedData } = parseData(
-        data,
-        ChannelRewardRedemptionUpdatedSchema,
-      );
-      return {
-        ...formattedData,
-        redeemer: {
-          ...formattedData.redeemer,
-          ...this.createUserActions(formattedData.redeemer.userId),
-        },
-        redeemedAt: new Date(redeemedAt),
-      };
-    },
-    "livestream.status.updated": (data: unknown) => {
-      const { startedAt, endedAt, ...formattedData } = parseData(
-        data,
-        LivestreamStatusUpdatedSchema,
-      );
-      return {
-        ...formattedData,
-        startedAt: new Date(startedAt),
-        endedAt: new Date(endedAt || 0),
-      };
-    },
-    "livestream.metadata.updated": (data: unknown) => {
-      return parseData(data, LivestreamMetadataUpdatedSchema);
-    },
-    "moderation.banned": (data: unknown) => {
-      const {
-        metadata: { createdAt, expiresAt, ...metadata },
-        ...formattedData
-      } = parseData(data, ModerationBannedSchema);
-      return {
-        ...formattedData,
-        bannedUser: {
-          ...formattedData.bannedUser,
-          ...this.createUserActions(formattedData.bannedUser.userId),
-        },
-        metadata: {
-          ...metadata,
-          createdAt: new Date(createdAt),
-          expiresAt: expiresAt ? new Date(expiresAt) : null,
-        },
-      };
-    },
-    "kicks.gifted": (data: unknown) => {
-      const { createdAt, ...formattedData } = parseData(
-        data,
-        KicksGiftedSchema,
-      );
-      return {
-        ...formattedData,
-        sender: {
-          ...formattedData.sender,
-          ...this.createUserActions(formattedData.sender.userId),
-        },
-        createdAt: new Date(createdAt),
-      };
-    },
+      },
+    }),
+    "kicks.gifted": ({
+      createdAt,
+      ...data
+    }: FormattedEventData<"kicks.gifted">) => ({
+      ...data,
+      sender: { ...data.sender, ...this.createUserActions(data.sender.userId) },
+      createdAt: new Date(createdAt),
+    }),
   };
 
   constructor(token: Token, options?: ClientOptions) {
@@ -210,35 +167,53 @@ export abstract class BaseClient {
     this.events = new EventsAPI(this, token, options);
   }
 
-  protected createWebhookHandler(
-    onMessage: (data: unknown) => unknown,
-  ): (req: Request) => Promise<Response> {
-    return async (req) => {
-      try {
-        const messageId = req.headers.get("kick-event-message-id");
-        const timestamp = req.headers.get("kick-event-message-timestamp");
-        const signature = req.headers.get("kick-event-signature");
-
-        if (!messageId || !timestamp || !signature) {
-          return new Response(undefined, { status: 401 });
-        }
-
-        const verifier = crypto.createVerify("RSA-SHA256");
-        verifier.update(`${messageId}.${timestamp}.${await req.text()}`);
-        verifier.end();
-
-        const signatureBuffer = Buffer.from(signature, "base64");
-        const valid = verifier.verify(publicKey, signatureBuffer);
-
-        if (!valid) return new Response(undefined, { status: 401 });
-
-        await onMessage(await req.json());
-
-        return new Response(undefined, { status: 200 });
-      } catch {
-        return new Response(undefined, { status: 401 });
-      }
-    };
+  protected createWebhookHandler(callbacks: {
+    [K in keyof typeof this.eventDataFormatters]?: (
+      data: ReturnType<(typeof this.eventDataFormatters)[K]>,
+    ) => unknown;
+  }) {
+    return createWebhookHandler({
+      "channel.followed": (data) =>
+        callbacks["channel.followed"]?.(
+          this.eventDataFormatters["channel.followed"](data),
+        ),
+      "channel.reward.redemption.updated": (data) =>
+        callbacks["channel.reward.redemption.updated"]?.(
+          this.eventDataFormatters["channel.reward.redemption.updated"](data),
+        ),
+      "channel.subscription.gifts": (data) =>
+        callbacks["channel.subscription.gifts"]?.(
+          this.eventDataFormatters["channel.subscription.gifts"](data),
+        ),
+      "channel.subscription.new": (data) =>
+        callbacks["channel.subscription.new"]?.(
+          this.eventDataFormatters["channel.subscription.new"](data),
+        ),
+      "channel.subscription.renewal": (data) =>
+        callbacks["channel.subscription.renewal"]?.(
+          this.eventDataFormatters["channel.subscription.renewal"](data),
+        ),
+      "chat.message.sent": (data) =>
+        callbacks["chat.message.sent"]?.(
+          this.eventDataFormatters["chat.message.sent"](data),
+        ),
+      "kicks.gifted": (data) =>
+        callbacks["kicks.gifted"]?.(
+          this.eventDataFormatters["kicks.gifted"](data),
+        ),
+      "livestream.metadata.updated": (data) =>
+        callbacks["livestream.metadata.updated"]?.(
+          this.eventDataFormatters["livestream.metadata.updated"](data),
+        ),
+      "livestream.status.updated": (data) =>
+        callbacks["livestream.status.updated"]?.(
+          this.eventDataFormatters["livestream.status.updated"](data),
+        ),
+      "moderation.banned": (data) =>
+        callbacks["moderation.banned"]?.(
+          this.eventDataFormatters["moderation.banned"](data),
+        ),
+    });
   }
 }
 
@@ -283,19 +258,12 @@ export class AppClient extends BaseClient {
     super(token, options);
   }
 
-  createKickWebhookHandler<T extends keyof typeof this.eventDataFormatters>(
-    event: T,
-    onMessage: (
-      data: ReturnType<(typeof this.eventDataFormatters)[T]>,
-    ) => unknown,
-  ) {
-    return this.createWebhookHandler((data) =>
-      onMessage(
-        this.eventDataFormatters[event](data) as ReturnType<
-          (typeof this.eventDataFormatters)[T]
-        >,
-      ),
-    );
+  createKickWebhookHandler(callbacks: {
+    [K in keyof typeof this.eventDataFormatters]?: (
+      data: ReturnType<(typeof this.eventDataFormatters)[K]>,
+    ) => unknown;
+  }) {
+    return this.createWebhookHandler(callbacks);
   }
 }
 
@@ -323,140 +291,138 @@ export class UserClient extends BaseClient {
   }
 
   private readonly userEventDataFormatters = {
-    "chat.message.sent": (data: unknown) => {
-      const formattedData = this.eventDataFormatters["chat.message.sent"](data);
-      return {
-        ...formattedData,
-        repliesTo: formattedData.repliesTo && {
-          ...formattedData.repliesTo,
-          sender: {
-            ...formattedData.repliesTo.sender,
+    "chat.message.sent": (
+      data: ReturnType<(typeof this.eventDataFormatters)["chat.message.sent"]>,
+    ) => ({
+      ...data,
+      repliesTo: data.repliesTo && {
+        ...data.repliesTo,
+        sender: {
+          ...data.repliesTo.sender,
+          ...this.createModerationActions(
+            data.repliesTo.sender.userId,
+            data.broadcaster.userId,
+          ),
+        },
+      },
+      sender: {
+        ...data.sender,
+        ...this.createModerationActions(
+          data.sender.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "channel.followed": (
+      data: ReturnType<(typeof this.eventDataFormatters)["channel.followed"]>,
+    ) => ({
+      ...data,
+      follower: {
+        ...data.follower,
+        ...this.createModerationActions(
+          data.follower.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "channel.subscription.renewal": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["channel.subscription.renewal"]
+      >,
+    ) => ({
+      ...data,
+      subscriber: {
+        ...data.subscriber,
+        ...this.createModerationActions(
+          data.subscriber.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "channel.subscription.gifts": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["channel.subscription.gifts"]
+      >,
+    ) => ({
+      ...data,
+      gifter: data.gifter.isAnonymous
+        ? { isAnonymous: true as const }
+        : {
+            ...data.gifter,
             ...this.createModerationActions(
-              formattedData.repliesTo.sender.userId,
-              formattedData.broadcaster.userId,
+              data.gifter.userId,
+              data.broadcaster.userId,
             ),
           },
-        },
-        sender: {
-          ...formattedData.sender,
-          ...this.createModerationActions(
-            formattedData.sender.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "channel.followed": (data: unknown) => {
-      const formattedData = this.eventDataFormatters["channel.followed"](data);
-      return {
-        ...formattedData,
-        follower: {
-          ...formattedData.follower,
-          ...this.createModerationActions(
-            formattedData.follower.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "channel.subscription.renewal": (data: unknown) => {
-      const formattedData =
-        this.eventDataFormatters["channel.subscription.renewal"](data);
-      return {
-        ...formattedData,
-        subscriber: {
-          ...formattedData.subscriber,
-          ...this.createModerationActions(
-            formattedData.subscriber.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "channel.subscription.gifts": (data: unknown) => {
-      const formattedData =
-        this.eventDataFormatters["channel.subscription.gifts"](data);
-      return {
-        ...formattedData,
-        gifter: formattedData.gifter.isAnonymous
-          ? { isAnonymous: true as const }
-          : {
-              ...formattedData.gifter,
-              ...this.createModerationActions(
-                formattedData.gifter.userId,
-                formattedData.broadcaster.userId,
-              ),
-            },
-      };
-    },
-    "channel.subscription.new": (data: unknown) => {
-      const formattedData =
-        this.eventDataFormatters["channel.subscription.new"](data);
-      return {
-        ...formattedData,
-        subscriber: {
-          ...formattedData.subscriber,
-          ...this.createModerationActions(
-            formattedData.subscriber.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "channel.reward.redemption.updated": (data: unknown) => {
-      const formattedData =
-        this.eventDataFormatters["channel.reward.redemption.updated"](data);
-      return {
-        ...formattedData,
-        reward: {
-          ...formattedData.reward,
-          delete: () =>
-            this.channelRewards.deleteChannelReward(formattedData.reward.id),
-          update: (options: UpdateChannelRewardParams) =>
-            this.channelRewards.updateChannelReward(
-              formattedData.reward.id,
-              options,
-            ),
-        },
-        redeemer: {
-          ...formattedData.redeemer,
-          ...this.createModerationActions(
-            formattedData.redeemer.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "livestream.status.updated":
-      this.eventDataFormatters["livestream.status.updated"],
-    "livestream.metadata.updated":
-      this.eventDataFormatters["livestream.metadata.updated"],
-    "moderation.banned": (data: unknown) => {
-      const formattedData = this.eventDataFormatters["moderation.banned"](data);
-      return {
-        ...formattedData,
-        bannedUser: {
-          ...formattedData.bannedUser,
-          ...this.createModerationActions(
-            formattedData.bannedUser.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
-    "kicks.gifted": (data: unknown) => {
-      const formattedData = this.eventDataFormatters["kicks.gifted"](data);
-      return {
-        ...formattedData,
-        sender: {
-          ...formattedData.sender,
-          ...this.createModerationActions(
-            formattedData.sender.userId,
-            formattedData.broadcaster.userId,
-          ),
-        },
-      };
-    },
+    }),
+    "channel.subscription.new": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["channel.subscription.new"]
+      >,
+    ) => ({
+      ...data,
+      subscriber: {
+        ...data.subscriber,
+        ...this.createModerationActions(
+          data.subscriber.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "channel.reward.redemption.updated": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["channel.reward.redemption.updated"]
+      >,
+    ) => ({
+      ...data,
+      reward: {
+        ...data.reward,
+        delete: () => this.channelRewards.deleteChannelReward(data.reward.id),
+        update: (options: UpdateChannelRewardParams) =>
+          this.channelRewards.updateChannelReward(data.reward.id, options),
+      },
+      redeemer: {
+        ...data.redeemer,
+        ...this.createModerationActions(
+          data.redeemer.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "livestream.status.updated": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["livestream.status.updated"]
+      >,
+    ) => data,
+    "livestream.metadata.updated": (
+      data: ReturnType<
+        (typeof this.eventDataFormatters)["livestream.metadata.updated"]
+      >,
+    ) => data,
+    "moderation.banned": (
+      data: ReturnType<(typeof this.eventDataFormatters)["moderation.banned"]>,
+    ) => ({
+      ...data,
+      bannedUser: {
+        ...data.bannedUser,
+        ...this.createModerationActions(
+          data.bannedUser.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
+    "kicks.gifted": (
+      data: ReturnType<(typeof this.eventDataFormatters)["kicks.gifted"]>,
+    ) => ({
+      ...data,
+      sender: {
+        ...data.sender,
+        ...this.createModerationActions(
+          data.sender.userId,
+          data.broadcaster.userId,
+        ),
+      },
+    }),
   };
 
   constructor(
@@ -496,18 +462,54 @@ export class UserClient extends BaseClient {
     this.users = new UserUsersAPI(this, token, options);
   }
 
-  createKickWebhookHandler<T extends keyof typeof this.userEventDataFormatters>(
-    event: T,
-    onMessage: (
-      data: ReturnType<(typeof this.userEventDataFormatters)[T]>,
-    ) => unknown,
-  ) {
-    return this.createWebhookHandler((data) =>
-      onMessage(
-        this.userEventDataFormatters[event](data) as ReturnType<
-          (typeof this.userEventDataFormatters)[T]
-        >,
-      ),
-    );
+  createKickWebhookHandler(callbacks: {
+    [K in keyof typeof this.userEventDataFormatters]?: (
+      data: ReturnType<(typeof this.userEventDataFormatters)[K]>,
+    ) => unknown;
+  }) {
+    return this.createWebhookHandler({
+      "channel.followed": (data) =>
+        callbacks["channel.followed"]?.(
+          this.userEventDataFormatters["channel.followed"](data),
+        ),
+      "channel.reward.redemption.updated": (data) =>
+        callbacks["channel.reward.redemption.updated"]?.(
+          this.userEventDataFormatters["channel.reward.redemption.updated"](
+            data,
+          ),
+        ),
+      "channel.subscription.gifts": (data) =>
+        callbacks["channel.subscription.gifts"]?.(
+          this.userEventDataFormatters["channel.subscription.gifts"](data),
+        ),
+      "channel.subscription.new": (data) =>
+        callbacks["channel.subscription.new"]?.(
+          this.userEventDataFormatters["channel.subscription.new"](data),
+        ),
+      "channel.subscription.renewal": (data) =>
+        callbacks["channel.subscription.renewal"]?.(
+          this.userEventDataFormatters["channel.subscription.renewal"](data),
+        ),
+      "chat.message.sent": (data) =>
+        callbacks["chat.message.sent"]?.(
+          this.userEventDataFormatters["chat.message.sent"](data),
+        ),
+      "kicks.gifted": (data) =>
+        callbacks["kicks.gifted"]?.(
+          this.userEventDataFormatters["kicks.gifted"](data),
+        ),
+      "livestream.metadata.updated": (data) =>
+        callbacks["livestream.metadata.updated"]?.(
+          this.userEventDataFormatters["livestream.metadata.updated"](data),
+        ),
+      "livestream.status.updated": (data) =>
+        callbacks["livestream.status.updated"]?.(
+          this.userEventDataFormatters["livestream.status.updated"](data),
+        ),
+      "moderation.banned": (data) =>
+        callbacks["moderation.banned"]?.(
+          this.userEventDataFormatters["moderation.banned"](data),
+        ),
+    });
   }
 }
