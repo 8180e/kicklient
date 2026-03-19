@@ -20,9 +20,16 @@ import {
 interface AccessToken {
   accessToken: string;
   expiresAt?: number;
+  clientId?: never;
+  clientSecret?: never;
+  refreshToken?: never;
+  onTokenRefresh?: never;
 }
 
-interface RefreshableAppClientOptions extends AccessToken {
+interface RefreshableAppClientOptions extends Omit<
+  AccessToken,
+  "clientId" | "clientSecret" | "refreshToken" | "onTokenRefresh"
+> {
   clientId: string;
   clientSecret: string;
   onTokenRefresh?(
@@ -244,7 +251,7 @@ export class AppClient extends BaseClient {
     options?: ClientOptions,
   ) {
     const token = { accessToken, expiresAt, async refreshTokens() {} };
-    if ("clientId" in appClientOptions) {
+    if (appClientOptions.clientId) {
       token.refreshTokens = createRefreshMethod(async function (
         this: typeof token,
       ) {
@@ -441,7 +448,7 @@ export class UserClient extends BaseClient {
       expiresAt,
       async refreshTokens() {},
     };
-    if ("clientId" in userClientOptions) {
+    if (userClientOptions.clientId) {
       token.refreshToken = userClientOptions.refreshToken;
       token.refreshTokens = createRefreshMethod(async function (
         this: typeof token,
