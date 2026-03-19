@@ -1,7 +1,7 @@
 import type { ClientOptions, Token } from "./api-client.js";
 import { getAppAccessToken, refreshToken } from "./auth.js";
 import { CategoriesAPI } from "./modules/categories.js";
-import { ChannelsAPI } from "./modules/channels.js";
+import { ChannelsAPI, UserChannelsAPI } from "./modules/channels.js";
 import { ChatAPI } from "./modules/chat.js";
 import { EventsAPI, UserEventsAPI } from "./modules/events.js";
 import { KicksAPI } from "./modules/kicks.js";
@@ -227,7 +227,7 @@ export abstract class BaseClient {
 function createRefreshMethod(refresh: () => Promise<void>) {
   let refreshing: Promise<void> | null = null;
 
-  return function () {
+  return () => {
     if (refreshing) return refreshing;
     return (refreshing = (async () => {
       try {
@@ -252,12 +252,10 @@ export class AppClient extends BaseClient {
   ) {
     const token = { accessToken, expiresAt, async refreshTokens() {} };
     if (appClientOptions.clientId) {
-      token.refreshTokens = createRefreshMethod(async function (
-        this: typeof token,
-      ) {
+      token.refreshTokens = createRefreshMethod(async () => {
         const appToken = await getAppAccessToken(appClientOptions);
-        this.accessToken = appToken.accessToken;
-        this.expiresAt = Date.now() + appToken.expiresIn * 1000;
+        token.accessToken = appToken.accessToken;
+        token.expiresAt = Date.now() + appToken.expiresIn * 1000;
         await appClientOptions.onTokenRefresh?.(appToken);
       });
     }
@@ -283,6 +281,7 @@ export class UserClient extends BaseClient {
   kicks;
   users;
   events: UserEventsAPI;
+  channels: UserChannelsAPI;
 
   private createModerationActions(userId: number, broadcasterUserId: number) {
     return {
@@ -450,13 +449,11 @@ export class UserClient extends BaseClient {
     };
     if (userClientOptions.clientId) {
       token.refreshToken = userClientOptions.refreshToken;
-      token.refreshTokens = createRefreshMethod(async function (
-        this: typeof token,
-      ) {
+      token.refreshTokens = createRefreshMethod(async () => {
         const userToken = await refreshToken(userClientOptions);
-        this.accessToken = userToken.accessToken;
-        this.refreshToken = userToken.refreshToken;
-        this.expiresAt = Date.now() + userToken.expiresIn * 1000;
+        token.accessToken = userToken.accessToken;
+        token.refreshToken = userToken.refreshToken;
+        token.expiresAt = Date.now() + userToken.expiresIn * 1000;
         await userClientOptions.onTokenRefresh?.(userToken);
       });
     }
@@ -469,6 +466,7 @@ export class UserClient extends BaseClient {
     this.kicks = new KicksAPI(this, token, options);
     this.events = new UserEventsAPI(this, token, options);
     this.users = new UserUsersAPI(this, token, options);
+    this.channels = new UserChannelsAPI(this, token, options);
   }
 
   createKickWebhookHandler(callbacks: {
