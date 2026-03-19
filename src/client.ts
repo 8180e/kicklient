@@ -274,6 +274,8 @@ export class UserClient extends BaseClient {
   chat;
   moderation;
   kicks;
+  users;
+  events: UserEventsAPI;
 
   private createModerationActions(userId: number, broadcasterUserId: number) {
     return {
