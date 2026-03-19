@@ -2,7 +2,11 @@ import type { ClientOptions, Token } from "./api-client.js";
 import { getAppAccessToken, refreshToken } from "./auth.js";
 import { CategoriesAPI } from "./modules/categories.js";
 import { ChannelsAPI, UserChannelsAPI } from "./modules/channels.js";
-import { ChatAPI } from "./modules/chat.js";
+import {
+  ChatAPI,
+  type PostChatMessageAsBotParams,
+  type PostChatMessageAsUserParams,
+} from "./modules/chat.js";
 import { EventsAPI, UserEventsAPI } from "./modules/events.js";
 import { KicksAPI } from "./modules/kicks.js";
 import { LivestreamsAPI } from "./modules/livestreams.js";
@@ -333,6 +337,34 @@ function createModerationActions(
 function createUserEventDataFormatters(client: UserClient) {
   return {
     "chat.message.sent"(data: Formatted<"chat.message.sent">) {
+      function createChatActions(messageId: string) {
+        return {
+          delete() {
+            return client.chat.deleteChatMessage(messageId);
+          },
+          replyAsBot(
+            params: Omit<PostChatMessageAsBotParams, "replyToMessageId">,
+          ) {
+            return client.chat.postChatMessageAsBot({
+              ...params,
+              replyToMessageId: messageId,
+            });
+          },
+          replyAsUser(
+            params: Omit<
+              PostChatMessageAsUserParams,
+              "replyToMessageId" | "broadcasterUserId"
+            >,
+          ) {
+            return client.chat.postChatMessageAsUser({
+              ...params,
+              broadcasterUserId: data.broadcaster.userId,
+              replyToMessageId: messageId,
+            });
+          },
+        };
+      }
+
       return {
         ...data,
         repliesTo: data.repliesTo && {
@@ -345,6 +377,7 @@ function createUserEventDataFormatters(client: UserClient) {
               data.broadcaster.userId,
             ),
           },
+          ...createChatActions(data.repliesTo.messageId),
         },
         sender: {
           ...data.sender,
@@ -354,6 +387,7 @@ function createUserEventDataFormatters(client: UserClient) {
             data.broadcaster.userId,
           ),
         },
+        ...createChatActions(data.messageId),
       };
     },
     "channel.followed"(data: Formatted<"channel.followed">) {
