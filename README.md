@@ -29,29 +29,27 @@ The authentication flow should be handled like this:
 
 ```typescript
 import express from "express";
-import { KickOAuth } from "kicklient";
 import session from "express-session";
-
-const auth = new KickOAuth(
-  process.env.KICK_CLIENT_ID!,
-  process.env.KICK_CLIENT_SECRET!,
-  process.env.KICK_REDIRECT_URI!
-);
+import { exchangeCodeForToken, getAuthorizationUrl } from "kicklient";
 
 const app = express();
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET!,
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-  })
+  }),
 );
 
 app.get("/auth", (req, res) => {
-  const { url, state, codeVerifier } = auth.getAuthorizationUrl([
-    /* requested scopes */
-  ]);
+  const { url, state, codeVerifier } = getAuthorizationUrl({
+    clientId: process.env.CLIENT_ID,
+    redirectUri: process.env.REDIRECT_URI,
+    scopes: [
+      /* requested scopes */
+    ],
+  });
 
   req.session.state = state;
   req.session.codeVerifier = codeVerifier;
@@ -69,58 +67,123 @@ app.get("/callback", async (req, res) => {
     return res.sendStatus(400);
   }
 
-  const tokens = await auth.exchangeCodeForToken(
-    req.query.code,
-    req.session.codeVerifier
-  );
+  const tokens = await exchangeCodeForToken({
+    code: req.query.code,
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    redirectUri: process.env.REDIRECT_URI,
+    codeVerifier: req.session.codeVerifier,
+  });
 
   // Save tokens to the database
 
   res.sendStatus(200);
 });
+
+app.listen(3000, () => console.log("Server is listening on port 3000"));
 ```
 
 ### Getting app token
 
 ```typescript
-const token = await auth.getAppAccessToken();
+import { getAppAccessToken } from "kicklient";
+
+const token = await getAppAccessToken({
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+});
 ```
 
 ### Basic usage
 
 ```typescript
-import { UserClient, KickOAuth, AppClient } from "kicklient";
+import { UserClient, AppClient } from "kicklient";
 
-const userClient = await UserClient.create(
-  auth,
-  userAccessToken,
-  userRefreshToken,
-  (tokens) => saveTokensToDB(tokens)
-);
+const userClient = new UserClient({
+  accessToken,
+  refreshToken,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  async onTokenRefresh(tokens) {
+    await saveTokensToDB(tokens);
+  },
+});
 
-const appClient = await AppClient.create(auth, appToken);
+const appClient = new AppClient({
+  accessToken,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  async onTokenRefresh(tokens) {
+    await saveTokensToDB(tokens);
+  },
+});
 
-console.log(await appClient.categories.getCategories("category_name"));
+console.log(await appClient.uses.getUsersByIds({ ids: [123, 321] }));
 
-// Requires [channel:rewards:write] scope
 console.log(await userClient.channelRewards.getChannelRewards());
 ```
 
-### Events
+### Getting paginated data
 
 ```typescript
-import { KickAPIEvents, KickOAuth, UserClient } from "kicklient";
+const categories = client.categories.getCategories({});
 
-const eventHandler = new KickAPIEvents();
+for await (const page of categories) {
+  console.log(page.map((category) => category.name));
+  // IMPORTANT: exit the loop once you get what you want to avoid unnecessary
+  // API calls
+  if (containsSearchedData(page)) break;
+}
+```
 
-await eventHandler.on("chat.message.sent", userId, client, async (message) => {
-  console.log(message.content);
-  if (message.content === "forbidden_word") {
-    try {
-      await message.sender.ban("Forbidden word");
-    } catch (error) {
-      console.error("An error occured:", error);
-    }
-  }
+### Events (with Express)
+
+```typescript
+import express from "express";
+import { createWebhookHandler } from "kicklient";
+
+await userClient.events.createEventsSubscriptions({
+  events: [
+    /* requested events */
+  ],
 });
+
+// OR
+
+await appClient.events.createEventsSubscriptions({
+  broadcasterUserId,
+  events: [
+    /* requested events */
+  ],
+});
+
+const app = express();
+
+const handler = createWebhookHandler({
+  async "chat.message.sent"(message) {
+    console.log("Received message:", message.content);
+  },
+});
+
+// or client.createWebhookHandler(...) to access object API methods
+
+app.post("/webhook-events", express.text({ type: "*/*" }), async (req, res) => {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (typeof value === "string") headers.append(key, value);
+  }
+
+  const fullUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
+  const request = new Request(fullUrl, {
+    method: req.method,
+    headers,
+    body: req.body,
+  });
+
+  const response = await handler(request);
+  res.sendStatus(response.status);
+});
+
+app.listen(3000, () => console.log("Server is listening on port 3000"));
 ```
